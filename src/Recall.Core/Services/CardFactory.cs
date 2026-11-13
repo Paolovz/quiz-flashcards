@@ -17,6 +17,9 @@ public static partial class CardFactory
 {
     private const int MaxFront = 90;
     private const int MaxBack = 260;
+
+    /// <summary>A list answer is several sentences, so it gets more room than a definition.</summary>
+    private const int MaxListBack = 400;
     private const int MaxTermWords = 7;
 
     [GeneratedRegex(@"(\w)-\n(\w)")]
@@ -87,7 +90,7 @@ public static partial class CardFactory
     {
         " that ", " which ", " who ", " whose ", " where ", " when ", " because ", " while ",
         " and ", " or ", " but ", " is ", " are ", " was ", " were ", " has ", " have ", " had ",
-        " can ", " will ", " would ", " should ", " may ", " might ", " must ", " to ", " of the "
+        " can ", " will ", " would ", " should ", " may ", " might ", " must ", " to "
     };
 
     /// <summary>Definition text that is a fragment of the sentence before it, not a definition.</summary>
@@ -213,7 +216,8 @@ public static partial class CardFactory
 
         // The bullet is stripped after the lines are rejoined: a bullet on the next line is
         // the one reliable sign that it starts a new item instead of continuing this one.
-        return MergeWrapped(kept)
+        // The flag is carried on the line so later passes can still see the list structure.
+        return MergeWrapped(kept.Select(l => l with { ListItem = BulletMarker().IsMatch(l.Text) }).ToList())
             .Select(l => l with { Text = BulletMarker().Replace(l.Text, "", 1).Trim() })
             .Where(l => l.Text.Length >= 3)
             .ToList();
@@ -266,7 +270,7 @@ public static partial class CardFactory
     /// </summary>
     private static bool Continues(PdfLine pending, PdfLine next, Dictionary<int, double> margins)
     {
-        if (BulletMarker().IsMatch(next.Text)) return false;
+        if (next.ListItem || BulletMarker().IsMatch(next.Text)) return false;
         if (next.Left < pending.Left - 2) return false;
 
         // Plain text has no geometry: every line came in at zero, so nothing to measure.
@@ -305,10 +309,74 @@ public static partial class CardFactory
         var body = BodySize(lines);
         var drafts = new List<DraftCard>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var terms = CollectTerms(lines, body);
         var order = 0;
 
-        // 1. A heading or bold line with prose under it.
+        // Prose for the two sentence-level passes. It is split before the term set is built
+        // because a phrase the document repeats is one of its terms.
+        var sentences = SplitSentences(string.Join('\n', lines.Select(l => l.Text)));
+
+        var terms = CollectTerms(lines, body);
+        foreach (var phrase in RepeatedPhrases(sentences)) terms.Add(phrase);
+
+        // 1. A heading over a run of bullets. The bullets are the answer, so the heading is
+        // the front and the run is the back. This runs before the definition pass because the
+        // "definition" under such a heading is the first bullet, which is not a definition.
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            if (line.ListItem || !IsTermLine(line, body)) continue;
+
+            var term = TidyTerm(line.Text);
+            if (!IsUsableTerm(term)) continue;
+
+            var items = new List<string>();
+            var used = 0;
+
+            for (var k = i + 1; k < lines.Count && lines[k].Page == line.Page; k++)
+            {
+                var next = lines[k];
+
+                // A lead-in line ("For a normal distribution:") sits between the heading and its
+                // bullets. Anything else that is not a bullet ends the list.
+                if (!next.ListItem)
+                {
+                    if (items.Count > 0 && next.Text.EndsWith(':')) continue;
+                    break;
+                }
+
+                var item = next.Text.Trim();
+                if (item.Length is < 3 or > 180) continue;
+                if (CodeShaped().IsMatch(item)) continue;
+                if (MathGlyph().IsMatch(item)) continue;
+
+                var numbered = $"{items.Count + 1}. {item.TrimEnd('.', ';')}.";
+
+                // Three items are the minimum for a list card, so the cap only applies once the
+                // card has enough in it to ask about.
+                if (items.Count >= 3 && used + numbered.Length > MaxListBack) break;
+
+                used += numbered.Length + 1;
+                items.Add(numbered);
+            }
+
+            // Two bullets under a heading is a sentence split in half, not a list to recall.
+            if (items.Count < 3) continue;
+
+            order++;
+            Add(new DraftCard(term, string.Join(' ', items), source, "list", 1.45, order), drafts, seen);
+        }
+
+        // 2. A definition written as an assignment: "median = the middle value of a data set".
+        // The left side is the question, the right side is the answer.
+        foreach (var line in lines)
+        {
+            if (!TryVariable(line.Text, out var lhs, out var rhs)) continue;
+
+            order++;
+            Add(new DraftCard($"What does {lhs} represent?", rhs, source, "variable", 1.25, order), drafts, seen);
+        }
+
+        // 3. A heading or bold line with prose under it.
         for (var i = 0; i < lines.Count; i++)
         {
             var line = lines[i];
@@ -328,8 +396,7 @@ public static partial class CardFactory
             Add(new DraftCard(term, def, source, "definition", 1.4, order), drafts, seen);
         }
 
-        // 2. Prose: inline definitions first, then copula sentences, then cloze.
-        var sentences = SplitSentences(string.Join('\n', lines.Select(l => l.Text)));
+        // 4. Prose: inline definitions first, then copula sentences, then cloze.
         var alreadyDefined = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var sentence in sentences)
@@ -379,6 +446,11 @@ public static partial class CardFactory
 
         foreach (var draft in drafts.OrderByDescending(d => d.Score).ThenBy(d => d.Order))
         {
+            // "What does X represent?" and "What does μ represent?" share every word worth
+            // comparing, but they ask about different symbols. Exact fronts are already
+            // rejected by the caller, so these are left alone.
+            if (draft.Kind == "variable") { kept.Add(draft); continue; }
+
             var tokens = Tokens(StripParenthetical(draft.Front));
 
             var duplicate = kept.Any(k =>
@@ -497,6 +569,35 @@ public static partial class CardFactory
         return terms;
     }
 
+    /// <summary>
+    /// A phrase the document repeats is one of its terms even when it is set in plain
+    /// lowercase: "standard deviation", "random variable". Cloze may blank those, which is
+    /// what turns a page of numbered properties into answerable cards.
+    /// </summary>
+    private static List<string> RepeatedPhrases(IEnumerable<string> sentences)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var sentence in sentences)
+        {
+            var words = Regex.Split(sentence, @"[^A-Za-z]+");
+
+            for (var i = 0; i < words.Length; i++)
+            {
+                for (var span = 2; span <= 3 && i + span <= words.Length; span++)
+                {
+                    var phrase = words[i..(i + span)];
+                    if (phrase.Any(w => w.Length < 4 || StopWords.Contains(w))) continue;
+
+                    var key = string.Join(' ', phrase);
+                    counts[key] = counts.GetValueOrDefault(key) + 1;
+                }
+            }
+        }
+
+        return counts.Where(p => p.Value >= 2).Select(p => p.Key).ToList();
+    }
+
     public static string Clean(string raw)
     {
         var text = raw.Replace("\r\n", "\n").Replace('\r', '\n');
@@ -600,6 +701,54 @@ public static partial class CardFactory
         return true;
     }
 
+    /// <summary>
+    /// "median = the middle value of a data set" and "speed = distance / time" are definitions
+    /// written as assignments. Two equals signs is a formula, a numeric right side is
+    /// arithmetic, and a left side longer than three words is a sentence.
+    /// </summary>
+    private static bool TryVariable(string line, out string lhs, out string rhs)
+    {
+        lhs = "";
+        rhs = "";
+
+        var s = line.Trim();
+        if (s.Length is < 8 or > 200) return false;
+        if (s.Count(c => c == '=') != 1) return false;
+        if (CodeShaped().IsMatch(s)) return false;
+
+        var at = s.IndexOf('=');
+        var left = s[..at].Trim();
+        var right = s[(at + 1)..].Trim().TrimEnd(';', ',');
+
+        // "where Z = standard score": the connector belongs to the sentence, not the symbol.
+        if (left.StartsWith("where ", StringComparison.OrdinalIgnoreCase))
+            left = left["where ".Length..].Trim();
+
+        if (left.Length is < 1 or > 34) return false;
+        if (right.Length is < 4 or > 120) return false;
+
+        // Operators mean a formula, not a meaning. "/" is left in: "distance / time".
+        if (right.IndexOfAny(new[] { '=', '{', '}', '<', '>', '|', '+', '*' }) >= 0) return false;
+        if (MathGlyph().IsMatch(right)) return false;
+
+        var words = left.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length is 0 or > 3) return false;
+        if (!char.IsLetter(left[0])) return false;
+        if (LeadInWords.Contains(words[0])) return false;
+        if (left.IndexOfAny(new[] { ',', '.', ':', '?', '!', '(', ')' }) >= 0) return false;
+        if (words.Length == 1 && GenericTerms.Contains(left)) return false;
+
+        // "x = 5" is arithmetic. A meaning has words in it.
+        if (!right.Any(char.IsLetter)) return false;
+
+        var definition = TidyDefinition(right);
+        if (definition.Length < 6) return false;
+
+        lhs = left;
+        rhs = definition;
+        return true;
+    }
+
     private static bool TryMatch(Regex regex, string s, out string first, out string second, bool invert = false)
     {
         first = "";
@@ -671,6 +820,11 @@ public static partial class CardFactory
 
         if (!IsUsableClozeAnswer(answer)) return false;
 
+        // The blank has to remove the answer from the sentence. "A ____ or structure can specify
+        // how accessible each of its members is to code outside of the class or structure" still
+        // shows the word, so the card asks nothing the reader can't already read.
+        if (IndexOfWord(blanked, answer) >= 0) return false;
+
         draft = new DraftCard(blanked, answer, null, "cloze", 0.5, 0);
         return true;
     }
@@ -711,9 +865,10 @@ public static partial class CardFactory
 
     /// <summary>
     /// Mathematical alphanumerics and arrows, which only appear in formulas. .NET regex
-    /// escapes are four hex digits, so the astral block is written as its surrogate pair.
+    /// escapes are four hex digits, so the astral block is an alternation on its surrogate
+    /// pair: inside a character class it would be read as class subtraction and never match.
     /// </summary>
-    [GeneratedRegex(@"[\u2190-\u21FF\u2200-\u22FF\uD835[\uDC00-\uDFFF]]")]
+    [GeneratedRegex(@"[\u2190-\u21FF\u2200-\u22FF]|\uD835[\uDC00-\uDFFF]")]
     private static partial Regex MathGlyph();
 
     /// <summary>
@@ -846,6 +1001,9 @@ public static partial class CardFactory
         if (term.Contains("http", StringComparison.OrdinalIgnoreCase)) return false;
         if (term.Contains('?') || term.Contains('!')) return false;
 
+        // "arguments_list" is an identifier in a code sample, not a concept.
+        if (term.Contains('_')) return false;
+
         // A clause is not a term. "Methods and variables that" is prose wearing a heading.
         var padded = " " + term.ToLowerInvariant() + " ";
         foreach (var marker in ClauseMarkers)
@@ -867,6 +1025,9 @@ public static partial class CardFactory
         if (string.Equals(def.TrimEnd('.'), term, StringComparison.OrdinalIgnoreCase)) return false;
         if (def.Contains("http", StringComparison.OrdinalIgnoreCase)) return false;
         if (def.Contains('?')) return false;
+
+        // A formula is not a definition: "(𝑏𝑏−𝑎𝑎) and the total area under the curve".
+        if (MathGlyph().IsMatch(def)) return false;
 
         var lower = def.ToLowerInvariant();
         foreach (var lead in DefLeadIns)

@@ -258,4 +258,135 @@ public class PdfImportQualityTests
         Assert.DoesNotContain(cards, c => c.Front.Contains("____es"));
         Assert.DoesNotContain(cards, c => c.Front.Contains("____s "));
     }
+
+    [Fact]
+    public void A_heading_over_a_bullet_list_becomes_one_card_answered_by_the_list()
+    {
+        var lines = new List<PdfLine>
+        {
+            Line("Properties of the Normal Curve", Heading, 1),
+            Line("\u2022 The total area under the curve is one.", Body, 0, 1),
+            Line("\u2022 The curve is symmetric about the mean.", Body, 0, 1),
+            Line("\u2022 The mean, median and mode are equal.", Body, 0, 1),
+        };
+
+        var cards = CardFactory.FromLines(CardFactory.PrepareDocument(lines), 10);
+
+        var card = Assert.Single(cards, c => c.Front == "Properties of the Normal Curve");
+        Assert.Contains("1. The total area under the curve is one.", card.Back);
+        Assert.Contains("3. The mean, median and mode are equal.", card.Back);
+    }
+
+    [Fact]
+    public void Two_bullets_fall_back_to_a_definition_instead_of_a_list_card()
+    {
+        var lines = new List<PdfLine>
+        {
+            Line("Properties of the Normal Curve", Heading, 1),
+            Line("\u2022 The total area under the curve is one.", Body, 0, 1),
+            Line("\u2022 The curve is symmetric about the mean.", Body, 0, 1),
+        };
+
+        var cards = CardFactory.FromLines(CardFactory.PrepareDocument(lines), 10);
+
+        var card = Assert.Single(cards, c => c.Front == "Properties of the Normal Curve");
+        Assert.DoesNotContain("1. ", card.Back);
+        Assert.Contains("symmetric about the mean", card.Back);
+    }
+
+    [Fact]
+    public void A_definition_written_as_an_assignment_becomes_a_question()
+    {
+        var cards = CardFactory.FromText("median = the middle value of a data set.", 10);
+
+        var card = Assert.Single(cards);
+        Assert.Equal("What does median represent?", card.Front);
+        Assert.Contains("middle value", card.Back);
+    }
+
+    [Fact]
+    public void An_assignment_whose_right_side_is_a_number_is_not_a_card()
+    {
+        var cards = CardFactory.FromText("x = 5", 10);
+
+        Assert.Empty(cards);
+    }
+
+    [Fact]
+    public void A_formula_with_two_equals_signs_is_not_a_card()
+    {
+        var cards = CardFactory.FromText("z = (x - mean) / standard deviation = 1.5", 10);
+
+        Assert.DoesNotContain(cards, c => c.Front.StartsWith("What does z", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_connector_before_the_symbol_is_not_part_of_the_symbol()
+    {
+        var cards = CardFactory.FromText("where Z = standard score", 10);
+
+        var card = Assert.Single(cards);
+        Assert.Equal("What does Z represent?", card.Front);
+    }
+
+    [Fact]
+    public void Two_symbols_with_the_same_wording_are_two_cards()
+    {
+        var lines = new List<PdfLine>
+        {
+            Line("X = the value of any particular observation."),
+            Line("\u03bc = the mean of the distribution."),
+        };
+
+        var cards = CardFactory.FromLines(CardFactory.PrepareDocument(lines), 10);
+
+        Assert.Contains(cards, c => c.Front == "What does X represent?");
+        Assert.Contains(cards, c => c.Front == "What does \u03bc represent?");
+    }
+
+    [Fact]
+    public void A_bullet_list_survives_a_lead_in_line()
+    {
+        var lines = new List<PdfLine>
+        {
+            Line("Properties of the Normal Curve", Heading, 1),
+            Line("\u2022 The normal distribution curve is symmetric about the mean.", Body, 0, 1),
+            Line("For a distribution that is symmetrical and bell-shaped:", Body, 0, 1),
+            Line("\u2022 68% of the values lie within 1 standard deviation.", Body, 0, 1),
+            Line("\u2022 95% of the values lie within 2 standard deviations.", Body, 0, 1),
+            Line("This shifts the mean of X to zero", Body, 0, 1),
+        };
+
+        var cards = CardFactory.FromLines(CardFactory.PrepareDocument(lines), 10);
+
+        var card = Assert.Single(cards, c => c.Front == "Properties of the Normal Curve");
+        Assert.Contains("1. The normal distribution curve", card.Back);
+        Assert.Contains("3. 95% of the values", card.Back);
+        Assert.DoesNotContain("shifts the mean", card.Back);
+    }
+
+    [Fact]
+    public void A_blank_whose_answer_is_still_visible_in_the_sentence_is_dropped()
+    {
+        var lines = new List<PdfLine>
+        {
+            Line("Class", Heading, 1),
+            Line("A class or structure can specify how accessible each of its members is to code " +
+                 "outside of the class or structure."),
+        };
+
+        var cards = CardFactory.FromLines(CardFactory.PrepareDocument(lines), 10);
+
+        Assert.DoesNotContain(cards, c => c.Kind == "cloze" &&
+                                          c.Back.Equals("class", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void An_identifier_with_an_underscore_is_not_a_term()
+    {
+        var cards = CardFactory.FromText(
+            "arguments_list refers to the actual value passed on the constructor or method.", 10);
+
+        Assert.Empty(cards);
+    }
 }

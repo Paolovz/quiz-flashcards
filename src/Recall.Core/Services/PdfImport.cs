@@ -41,6 +41,27 @@ public static class PdfImport
             foreach (var page in readable)
                 drafts.AddRange(CardFactory.FromLines(page.ToList(), perPage, $"p. {page.Key}"));
 
+            // Two blanks per answer across the whole document. The per-page pass already caps
+            // its own, but a term that repeats on four pages would still arrive four times.
+            var blanks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            drafts = drafts.Where(d =>
+            {
+                if (d.Kind != "cloze") return true;
+
+                var used = blanks.GetValueOrDefault(d.Back);
+                if (used >= 2) return false;
+                blanks[d.Back] = used + 1;
+                return true;
+            }).ToList();
+
+            // The same question asked on two pages is one card. The ranking below already puts
+            // the higher-scoring copy first, so the first one seen wins.
+            var fronts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            drafts = drafts
+                .OrderByDescending(d => d.Score)
+                .Where(d => fronts.Add(TextMatch.Normalize(d.Front)))
+                .ToList();
+
             var ranked = drafts
                 .OrderByDescending(d => d.Score)
                 .ThenBy(d => d.Source)

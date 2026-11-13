@@ -9,7 +9,14 @@ namespace Recall.Services;
 /// and <paramref name="Right"/> are the glyph extents, which is how a wrapped line is told
 /// apart from a short line that simply ended: only a wrapped line reaches the right margin.
 /// </summary>
-public sealed record PdfLine(int Page, string Text, double Size, double BoldRatio, double Left, double Right = 0)
+public sealed record PdfLine(
+    int Page,
+    string Text,
+    double Size,
+    double BoldRatio,
+    double Left,
+    double Right = 0,
+    bool ListItem = false)
 {
     public bool IsBold => BoldRatio >= 0.6;
 
