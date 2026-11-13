@@ -1,22 +1,24 @@
 # Recall
 
-A native Windows flashcard app. Decks, spaced repetition, eight question types, and a
-PDF importer that turns a document into cards. No account, no sync, no AI — one JSON
-file on your disk.
+A flashcard app for Windows. It keeps decks on your disk, schedules reviews with SM-2, and
+asks eight kinds of question. A PDF importer turns a document into cards. There is no
+account, no sync, and no AI: everything lives in one JSON file.
 
 ![Windows](https://img.shields.io/badge/platform-Windows%2011-7C3AED)
 ![.NET](https://img.shields.io/badge/.NET-10-7C3AED)
 
 ## What it does
 
-- **Deck library** with due counts, mastery, a 12-week review heatmap, and streak.
-- **Spaced repetition** using SM-2: ease factor, interval, lapses, and a due date per card.
-- **Quiz mode** and **study mode** over a whole deck, a filtered set, or everything due.
-- **Session summary** with accuracy, time, the cards you missed, and a re-run button.
-- **PDF import** that extracts definition-shaped pairs, shows a review list, and only then
-  writes cards.
-- **Four palettes** — Clay, Deep Ocean, Sandstone, Forest Night — switchable in Settings and
-  applied live.
+- A deck library with due counts, mastery, a 12-week review heatmap, and a streak.
+- SM-2 spaced repetition. Each card carries an ease factor, an interval, a lapse count, and
+  a due date.
+- Quiz mode and study mode over a whole deck, a filtered set, or everything due.
+- A session summary with accuracy, time, the cards you missed, and a button to run the
+  session again.
+- PDF import that pulls definition-shaped pairs out of a document and shows them in a
+  review list. Nothing is written until you press Add.
+- Four palettes: Clay, Deep Ocean, Sandstone, Forest Night. Settings switches them and the
+  running window repaints.
 
 ## Question types
 
@@ -33,7 +35,7 @@ file on your disk.
 
 Answers can list alternatives with `|`. The first alternative is the key term, so
 `Mitochondria, the site of aerobic respiration` accepts `Mitochondria` alone but not
-`Mitochondrion`. Typed answers are compared exactly — no fuzzy matching, no partial credit.
+`Mitochondrion`. Typed answers must match exactly. A near miss scores zero.
 
 ## Build
 
@@ -63,10 +65,10 @@ dotnet publish src/Recall.App/Recall.App.csproj -c Release -r win-x64 --self-con
 %LOCALAPPDATA%\Recall\data.json
 ```
 
-Decks, cards, review history, and the chosen palette. The file is written to a temporary
-name and moved into place, so an interrupted save leaves the previous file intact. Set
-`RECALL_DATA_DIR` to point at a different folder — that is how the test runs stay away from
-a real profile.
+Decks, cards, review history, and the chosen palette go in that one file. A save writes to a
+temporary name and then moves it into place, so an interrupted save leaves the previous
+file intact. Set `RECALL_DATA_DIR` to use a different folder. The test runs set it so they
+stay off a real profile.
 
 Settings shows the exact path and can copy it.
 
