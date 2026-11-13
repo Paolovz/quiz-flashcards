@@ -1,0 +1,65 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Sandstone: warm paper with a burnt-orange primary and a teal correct-answer. -->
+    <Color x:Key="C.Primary">#C2410C</Color>
+    <Color x:Key="C.PrimaryDeep">#9A3412</Color>
+    <Color x:Key="C.PrimarySoft">#FFEDD5</Color>
+    <Color x:Key="C.OnPrimary">#FFFFFF</Color>
+    <Color x:Key="C.Accent">#0F766E</Color>
+    <Color x:Key="C.AccentDeep">#115E59</Color>
+    <Color x:Key="C.AccentSoft">#CCFBF1</Color>
+    <Color x:Key="C.Warn">#B45309</Color>
+    <Color x:Key="C.WarnSoft">#FEF3C7</Color>
+    <Color x:Key="C.Danger">#B91C1C</Color>
+    <Color x:Key="C.DangerSoft">#FEE2E2</Color>
+    <Color x:Key="C.Background">#FDF8F3</Color>
+    <Color x:Key="C.Surface">#FFFFFF</Color>
+    <Color x:Key="C.SurfaceAlt">#FAF2E9</Color>
+    <Color x:Key="C.Border">#F2E4D6</Color>
+    <Color x:Key="C.BorderStrong">#E7D2BC</Color>
+    <Color x:Key="C.Text">#1C1917</Color>
+    <Color x:Key="C.TextMuted">#57534E</Color>
+    <Color x:Key="C.TextFaint">#78716C</Color>
+    <Color x:Key="C.Heat1">#FED7AA</Color>
+    <Color x:Key="C.Heat2">#FB923C</Color>
+    <Color x:Key="C.Scrim">#8A431407</Color>
+
+    <SolidColorBrush x:Key="B.Primary" Color="{StaticResource C.Primary}" />
+    <SolidColorBrush x:Key="B.PrimaryDeep" Color="{StaticResource C.PrimaryDeep}" />
+    <SolidColorBrush x:Key="B.PrimarySoft" Color="{StaticResource C.PrimarySoft}" />
+    <SolidColorBrush x:Key="B.OnPrimary" Color="{StaticResource C.OnPrimary}" />
+    <SolidColorBrush x:Key="B.Accent" Color="{StaticResource C.Accent}" />
+    <SolidColorBrush x:Key="B.AccentDeep" Color="{StaticResource C.AccentDeep}" />
+    <SolidColorBrush x:Key="B.AccentSoft" Color="{StaticResource C.AccentSoft}" />
+    <SolidColorBrush x:Key="B.Warn" Color="{StaticResource C.Warn}" />
+    <SolidColorBrush x:Key="B.WarnSoft" Color="{StaticResource C.WarnSoft}" />
+    <SolidColorBrush x:Key="B.Danger" Color="{StaticResource C.Danger}" />
+    <SolidColorBrush x:Key="B.DangerSoft" Color="{StaticResource C.DangerSoft}" />
+    <SolidColorBrush x:Key="B.Background" Color="{StaticResource C.Background}" />
+    <SolidColorBrush x:Key="B.Surface" Color="{StaticResource C.Surface}" />
+    <SolidColorBrush x:Key="B.SurfaceAlt" Color="{StaticResource C.SurfaceAlt}" />
+    <SolidColorBrush x:Key="B.Border" Color="{StaticResource C.Border}" />
+    <SolidColorBrush x:Key="B.BorderStrong" Color="{StaticResource C.BorderStrong}" />
+    <SolidColorBrush x:Key="B.Text" Color="{StaticResource C.Text}" />
+    <SolidColorBrush x:Key="B.TextMuted" Color="{StaticResource C.TextMuted}" />
+    <SolidColorBrush x:Key="B.TextFaint" Color="{StaticResource C.TextFaint}" />
+    <SolidColorBrush x:Key="B.Heat1" Color="{StaticResource C.Heat1}" />
+    <SolidColorBrush x:Key="B.Heat2" Color="{StaticResource C.Heat2}" />
+    <SolidColorBrush x:Key="B.Scrim" Color="{StaticResource C.Scrim}" />
+    <SolidColorBrush x:Key="B.Ring" Color="{StaticResource C.Primary}" />
+    <SolidColorBrush x:Key="B.White70" Color="#FFFFFF" Opacity="0.72" />
+
+    <LinearGradientBrush x:Key="B.Wash" StartPoint="0,0" EndPoint="0.4,1">
+        <GradientStop Color="#FDF6EE" Offset="0" />
+        <GradientStop Color="#FFFBF6" Offset="0.45" />
+        <GradientStop Color="#F7F4EF" Offset="1" />
+    </LinearGradientBrush>
+
+    <DropShadowEffect x:Key="E.Card" Color="#7C2D12" BlurRadius="26" ShadowDepth="6"
+                      Direction="270" Opacity="0.10" />
+    <DropShadowEffect x:Key="E.CardSoft" Color="#7C2D12" BlurRadius="16" ShadowDepth="3"
+                      Direction="270" Opacity="0.07" />
+    <DropShadowEffect x:Key="E.Primary" Color="#9A3412" BlurRadius="18" ShadowDepth="5"
+                      Direction="270" Opacity="0.24" />
+</ResourceDictionary>

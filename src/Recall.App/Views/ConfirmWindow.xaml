@@ -1,0 +1,57 @@
+﻿<Window x:Class="Recall.Views.ConfirmWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Recall"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal">
+
+    <Grid>
+        <!-- Scrim: isolates the question from the list behind it and takes the cancel click. -->
+        <Border Background="{DynamicResource B.Scrim}" MouseLeftButtonDown="OnScrim" />
+
+        <Border Background="{DynamicResource B.Surface}"
+                BorderBrush="{DynamicResource B.Border}"
+                BorderThickness="3"
+                CornerRadius="24"
+                Padding="28,24"
+                Margin="24"
+                MaxWidth="470"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="40" ShadowDepth="10" Direction="270"
+                                  Opacity="0.22" Color="#3B0764" />
+            </Border.Effect>
+
+            <StackPanel>
+                <Border Style="{StaticResource Chip}" HorizontalAlignment="Left"
+                        Background="{DynamicResource B.DangerSoft}" Padding="11,4">
+                    <TextBlock x:Name="KindText" Style="{StaticResource T.Label}"
+                               Foreground="{DynamicResource B.Danger}" />
+                </Border>
+
+                <TextBlock x:Name="TitleText" Style="{StaticResource T.H2}" Margin="0,12,0,0"
+                           TextWrapping="Wrap" />
+
+                <TextBlock x:Name="MessageText" Style="{StaticResource T.Body}" Margin="0,8,0,0"
+                           TextWrapping="Wrap" LineHeight="23" />
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+                    <Button x:Name="CancelButton" Style="{StaticResource Btn}"
+                            Content="Keep it" MinWidth="112" HorizontalContentAlignment="Center"
+                            IsCancel="True" Click="OnCancel"
+                            AutomationProperties.Name="Keep it" />
+                    <Button x:Name="ConfirmButton" Style="{StaticResource BtnDanger}" Margin="10,0,0,0"
+                            MinWidth="128" HorizontalContentAlignment="Center"
+                            Click="OnConfirm" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

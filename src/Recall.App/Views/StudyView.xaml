@@ -1,0 +1,151 @@
+﻿<UserControl x:Class="Recall.Views.StudyView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Recall.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             d:DataContext="{d:DesignInstance Type=vm:StudyViewModel}"
+             mc:Ignorable="d"
+             Focusable="True">
+
+    <UserControl.Resources>
+        <Style x:Key="RevealPanel" TargetType="Border">
+            <Setter Property="Visibility" Value="Visible" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Revealed}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="GradePanel" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Revealed}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Session bar -->
+        <Grid Grid.Row="0" Margin="2,0,2,14">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding Title}" Style="{StaticResource T.H2}" VerticalAlignment="Center" />
+                <Border Style="{StaticResource Chip}" Margin="12,0,0,0">
+                    <TextBlock Text="{Binding ProgressText}" Style="{StaticResource T.Label}"
+                               Foreground="{DynamicResource B.PrimaryDeep}" />
+                </Border>
+            </StackPanel>
+
+            <Button Style="{StaticResource BtnGhost}" Content="End session" HorizontalAlignment="Right"
+                    Command="{Binding ExitCommand}" AutomationProperties.Name="End this study session" />
+        </Grid>
+
+        <ProgressBar Grid.Row="1" Style="{StaticResource Bar}" Maximum="100" Value="{Binding Progress, Mode=OneWay}"
+                     Margin="0,0,0,0" Height="6" />
+
+        <!-- Card -->
+        <Border Grid.Row="2" Style="{StaticResource Clay}" Margin="0,16,0,0" Padding="40,32">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel VerticalAlignment="Center" MaxWidth="720">
+                        <TextBlock Text="QUESTION" Style="{StaticResource T.Label}" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding FrontText}" Style="{StaticResource T.Display}" FontSize="30"
+                                   TextAlignment="Center" Margin="0,14,0,0" LineHeight="42" />
+
+                        <Border Style="{StaticResource Chip}" HorizontalAlignment="Center" Margin="0,20,0,0"
+                                Visibility="{Binding HasHint, Converter={StaticResource BoolVis}}">
+                            <TextBlock Text="{Binding HintText}" Style="{StaticResource T.Small}" />
+                        </Border>
+
+                        <Border Height="2" Background="{DynamicResource B.Border}" Margin="0,26,0,0"
+                                Visibility="{Binding Revealed, Converter={StaticResource BoolVis}}" />
+
+                        <TextBlock Text="{Binding BackText}" Style="{StaticResource T.Body}" FontSize="20"
+                                   TextAlignment="Center" Margin="0,26,0,0" LineHeight="30"
+                                   Visibility="{Binding Revealed, Converter={StaticResource BoolVis}}" />
+
+                        <TextBlock Text="{Binding SourceText}" Style="{StaticResource T.Small}"
+                                   TextAlignment="Center" Margin="0,22,0,0" FontStyle="Italic"
+                                   Visibility="{Binding HasSource, Converter={StaticResource BoolVis}}" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Grid.Row="1" Style="{StaticResource RevealPanel}" Margin="0,24,0,0">
+                    <StackPanel HorizontalAlignment="Center">
+                        <Button Style="{StaticResource BtnPrimary}" Content="Show answer"
+                                Command="{Binding RevealCommand}" MinWidth="220" Padding="24,14"
+                                FontSize="15" HorizontalContentAlignment="Center"
+                                AutomationProperties.Name="Reveal the answer" />
+                        <TextBlock Text="Space or Enter" Style="{StaticResource T.Label}"
+                                   HorizontalAlignment="Center" Margin="0,10,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Grid.Row="1" Style="{StaticResource GradePanel}" Margin="0,24,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource BtnDanger}" Command="{Binding AgainCommand}"
+                                Margin="0,0,8,0" HorizontalContentAlignment="Center">
+                            <StackPanel>
+                                <TextBlock Text="Again" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding AgainInterval}" FontSize="11" FontWeight="Normal"
+                                           Opacity="0.75" HorizontalAlignment="Center" Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="1" Style="{StaticResource BtnGrade}" Command="{Binding HardCommand}"
+                                Background="{DynamicResource B.WarnSoft}" Foreground="{DynamicResource B.Warn}"
+                                Margin="0,0,8,0" HorizontalContentAlignment="Center">
+                            <StackPanel>
+                                <TextBlock Text="Hard" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding HardInterval}" FontSize="11" FontWeight="Normal"
+                                           Opacity="0.75" HorizontalAlignment="Center" Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="2" Style="{StaticResource BtnPrimary}" Command="{Binding GoodCommand}"
+                                Margin="0,0,8,0" HorizontalContentAlignment="Center">
+                            <StackPanel>
+                                <TextBlock Text="Good" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding GoodInterval}" FontSize="11" FontWeight="Normal"
+                                           Opacity="0.75" HorizontalAlignment="Center" Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="3" Style="{StaticResource BtnAccent}" Command="{Binding EasyCommand}"
+                                HorizontalContentAlignment="Center">
+                            <StackPanel>
+                                <TextBlock Text="Easy" HorizontalAlignment="Center" />
+                                <TextBlock Text="{Binding EasyInterval}" FontSize="11" FontWeight="Normal"
+                                           Opacity="0.75" HorizontalAlignment="Center" Margin="0,3,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <TextBlock Text="1 Again Â· 2 Hard Â· 3 Good Â· 4 Easy" Style="{StaticResource T.Label}"
+                               HorizontalAlignment="Center" Margin="0,12,0,0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

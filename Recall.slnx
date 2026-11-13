@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Recall.App/Recall.App.csproj" />
+    <Project Path="src/Recall.Core/Recall.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Recall.Tests/Recall.Tests.csproj" />
+  </Folder>
+</Solution>

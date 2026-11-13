@@ -1,0 +1,21 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Everything that does not change with the palette. Colors and brushes live in
+         Themes/Palette/*.xaml and are swapped at runtime by Theming/ThemeManager. -->
+
+    <FontFamily x:Key="F.Display">Segoe UI Variable Display, Segoe UI Semibold, Segoe UI</FontFamily>
+    <FontFamily x:Key="F.Text">Segoe UI Variable Text, Segoe UI</FontFamily>
+
+    <!-- Motion tokens. Short distances, ease-out, exit faster than enter. -->
+    <Duration x:Key="D.Fast">0:0:0.13</Duration>
+    <Duration x:Key="D.Base">0:0:0.22</Duration>
+    <Duration x:Key="D.Slow">0:0:0.32</Duration>
+
+    <CubicEase x:Key="Ease.Out" EasingMode="EaseOut" />
+    <CubicEase x:Key="Ease.InOut" EasingMode="EaseInOut" />
+    <BackEase x:Key="Ease.Back" Amplitude="0.35" EasingMode="EaseOut" />
+
+    <BooleanToVisibilityConverter x:Key="BoolVis" />
+
+</ResourceDictionary>

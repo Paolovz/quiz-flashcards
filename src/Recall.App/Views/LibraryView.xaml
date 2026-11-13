@@ -1,0 +1,293 @@
+﻿<UserControl x:Class="Recall.Views.LibraryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Recall.ViewModels"
+             d:DataContext="{d:DesignInstance Type=vm:LibraryViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <!-- Deck tile: lifts under the cursor without shifting the wrap panel. -->
+        <Style x:Key="DeckCard" TargetType="Border" BasedOn="{StaticResource Clay}">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <TranslateTransform />
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Y" To="-4"
+                                                 Duration="{StaticResource D.Base}"
+                                                 EasingFunction="{StaticResource Ease.Out}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                    <Trigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Y" To="0"
+                                                 Duration="{StaticResource D.Base}"
+                                                 EasingFunction="{StaticResource Ease.Out}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.ExitActions>
+                    <Setter Property="BorderBrush" Value="{DynamicResource B.BorderStrong}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Heatmap cell: level 0-4, -1 means a future day and stays empty. -->
+        <Style x:Key="HeatCell" TargetType="Border">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Margin" Value="2" />
+            <Setter Property="Background" Value="{DynamicResource B.SurfaceAlt}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource B.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Level}" Value="1">
+                    <Setter Property="Background" Value="{DynamicResource B.Heat1}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource B.Heat1}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="2">
+                    <Setter Property="Background" Value="{DynamicResource B.Heat2}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource B.Heat2}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="3">
+                    <Setter Property="Background" Value="{DynamicResource B.Primary}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource B.Primary}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="4">
+                    <Setter Property="Background" Value="{DynamicResource B.PrimaryDeep}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource B.PrimaryDeep}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="-1">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="BorderBrush" Value="Transparent" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+        <StackPanel Margin="0,0,0,28">
+
+            <!-- Hero -->
+            <Border Style="{StaticResource Clay}" Padding="28,24">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="{Binding Greeting}" Style="{StaticResource T.Label}" />
+                        <TextBlock Text="{Binding TodayHeadline}" Style="{StaticResource T.Display}" Margin="0,6,0,0" />
+                        <TextBlock Text="{Binding TodayBody}" Style="{StaticResource T.Body}"
+                                   Foreground="{DynamicResource B.TextMuted}" Margin="0,8,0,0" MaxWidth="520"
+                                   HorizontalAlignment="Left" />
+                        <TextBlock Text="{Binding Subtitle}" Style="{StaticResource T.Small}" Margin="0,14,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0,0,0">
+                        <Button Style="{StaticResource BtnPrimary}" Command="{Binding StudyAllCommand}"
+                                MinWidth="176" HorizontalContentAlignment="Center"
+                                AutomationProperties.Name="Start a study session with every due card">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Study all due" />
+                                <TextBlock Text="{Binding DueToday}" Margin="8,0,0,0"
+                                           FontWeight="Bold" Foreground="White" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource Btn}" Command="{Binding ImportCommand}"
+                                Margin="0,10,0,0" HorizontalContentAlignment="Center"
+                                AutomationProperties.Name="Import a PDF into a new deck">
+                            Import PDF
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Metrics + activity, one panel so the row reads as a unit -->
+            <Border Style="{StaticResource ClayFlat}" Margin="0,18,0,0" Padding="0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1.5*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="22,20">
+                        <TextBlock Text="DUE TODAY" Style="{StaticResource T.Label}" />
+                        <TextBlock Text="{Binding DueToday}" Style="{StaticResource T.Metric}" Margin="0,4,0,0" />
+                    </StackPanel>
+
+                    <Border Grid.Column="1" BorderThickness="2,0,0,0" BorderBrush="{DynamicResource B.Border}">
+                        <StackPanel VerticalAlignment="Center" Margin="22,20">
+                            <TextBlock Text="REVIEWS TODAY" Style="{StaticResource T.Label}" />
+                            <TextBlock Text="{Binding ReviewsToday}" Style="{StaticResource T.Metric}" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" BorderThickness="2,0,0,0" BorderBrush="{DynamicResource B.Border}">
+                        <StackPanel VerticalAlignment="Center" Margin="22,20">
+                            <TextBlock Text="AVG MASTERY" Style="{StaticResource T.Label}" />
+                            <TextBlock Text="{Binding MasteryText}" Style="{StaticResource T.Metric}" Margin="0,4,0,0"
+                                       Foreground="{DynamicResource B.Accent}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="3" BorderThickness="2,0,0,0" BorderBrush="{DynamicResource B.Border}">
+                        <StackPanel VerticalAlignment="Center" Margin="22,20">
+                            <Grid>
+                                <TextBlock Text="LAST 12 WEEKS" Style="{StaticResource T.Label}" />
+                                <TextBlock Text="Reviews per day" Style="{StaticResource T.Label}"
+                                           Foreground="{DynamicResource B.TextFaint}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Activity}" Margin="0,10,0,0" HorizontalAlignment="Left">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Rows="7" Columns="12" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource HeatCell}" ToolTip="{Binding Label}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Decks header -->
+            <Grid Margin="0,26,0,12">
+                <TextBlock Text="Your decks" Style="{StaticResource T.H1}" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <!-- What just happened, so a delete does not vanish without a word. -->
+                    <Border Style="{StaticResource Chip}" Background="{DynamicResource B.AccentSoft}"
+                            Margin="0,0,12,0" VerticalAlignment="Center"
+                            Visibility="{Binding HasStatus, Converter={StaticResource BoolVis}}">
+                        <TextBlock Text="{Binding Status}" Style="{StaticResource T.Label}"
+                                   Foreground="{DynamicResource B.AccentDeep}"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </Border>
+                    <Button Style="{StaticResource Btn}" Command="{Binding ImportCommand}" Margin="0,0,8,0">
+                        Import PDF
+                    </Button>
+                    <Button Style="{StaticResource BtnPrimary}" Command="{Binding NewDeckCommand}"
+                            AutomationProperties.Name="Create a new empty deck">
+                        New deck
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Inline create form -->
+            <Border Style="{StaticResource ClayFlat}" Padding="18" Margin="0,0,0,14"
+                    Visibility="{Binding IsCreating, Converter={StaticResource BoolVis}}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="220" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                            <TextBlock Text="DECK NAME" Style="{StaticResource T.Label}" Margin="2,0,0,6" />
+                            <TextBox Style="{StaticResource Input}"
+                                     Text="{Binding NewName, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="{Binding NameTag}"
+                                     AutomationProperties.Name="New deck name" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                            <TextBlock Text="SUBJECT" Style="{StaticResource T.Label}" Margin="2,0,0,6" />
+                            <TextBox Style="{StaticResource Input}"
+                                     Text="{Binding NewSubject, UpdateSourceTrigger=PropertyChanged}"
+                                     Tag="{Binding SubjectTag}"
+                                     AutomationProperties.Name="New deck subject" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Bottom">
+                            <Button Style="{StaticResource BtnGhost}" Command="{Binding CancelCommand}" Content="Cancel" />
+                            <Button Style="{StaticResource BtnPrimary}" Command="{Binding CreateDeckCommand}"
+                                    Content="Create" Margin="8,0,0,0" IsDefault="True" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="{Binding CreateError}" Style="{StaticResource T.Small}"
+                               Foreground="{DynamicResource B.Danger}" FontWeight="SemiBold"
+                               Margin="2,10,0,0" TextWrapping="Wrap"
+                               AutomationProperties.LiveSetting="Assertive"
+                               Visibility="{Binding HasCreateError, Converter={StaticResource BoolVis}}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Empty state -->
+            <Border Style="{StaticResource ClayFlat}" Padding="32" Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}">
+                <StackPanel HorizontalAlignment="Center" Margin="0,20">
+                    <TextBlock Text="No decks yet" Style="{StaticResource T.H2}" HorizontalAlignment="Center" />
+                    <TextBlock Style="{StaticResource T.Small}" HorizontalAlignment="Center" Margin="0,6,0,0"
+                               Text="Create one by hand, or drop a PDF in and let the extractor pull cards out." />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                        <Button Style="{StaticResource Btn}" Command="{Binding ImportCommand}" Content="Import a PDF" />
+                        <Button Style="{StaticResource BtnPrimary}" Command="{Binding NewDeckCommand}"
+                                Content="New deck" Margin="8,0,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Deck grid -->
+            <ItemsControl ItemsSource="{Binding Decks}" Visibility="{Binding HasDecks, Converter={StaticResource BoolVis}}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource DeckCard}" Width="320" Padding="20,18" Margin="0,0,14,14">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="{Binding Subject}" Style="{StaticResource T.Label}" />
+                                    <TextBlock Text="{Binding DueLabel}" Style="{StaticResource T.Label}"
+                                               Foreground="{DynamicResource B.PrimaryDeep}" HorizontalAlignment="Right" />
+                                </Grid>
+
+                                <TextBlock Text="{Binding Name}" Style="{StaticResource T.H2}" Margin="0,6,0,0"
+                                           TextTrimming="CharacterEllipsis" />
+
+                                <TextBlock Text="{Binding CountLabel}" Style="{StaticResource T.Small}" Margin="0,4,0,0" />
+
+                                <ProgressBar Style="{StaticResource Bar}" Maximum="1" Value="{Binding Mastery, Mode=OneWay}"
+                                             Margin="0,14,0,0" Height="8" />
+
+                                <Grid Margin="0,14,0,0">
+                                    <Button Style="{StaticResource BtnPrimary}" Content="Open"
+                                            Padding="14,8" HorizontalAlignment="Left"
+                                            Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="Open deck" />
+                                    <Button Style="{StaticResource BtnDanger}" Content="Delete" Padding="12,8"
+                                            HorizontalAlignment="Right"
+                                            Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.Name="Delete deck" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,219 @@
+<UserControl x:Class="Recall.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:Recall.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <!-- One palette card. The swatch strip is built from the theme's own hex values,
+             so a theme previews correctly while a different one is applied. -->
+        <Style x:Key="ThemeCard" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,14,14" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="18" Padding="16"
+                                Background="{DynamicResource B.Surface}"
+                                BorderBrush="{DynamicResource B.Border}"
+                                BorderThickness="3"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1" />
+                            </Border.RenderTransform>
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource B.BorderStrong}" />
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Scale"
+                                                             Storyboard.TargetProperty="ScaleX" To="1.012"
+                                                             Duration="{StaticResource D.Fast}"
+                                                             EasingFunction="{StaticResource Ease.Out}" />
+                                            <DoubleAnimation Storyboard.TargetName="Scale"
+                                                             Storyboard.TargetProperty="ScaleY" To="1.012"
+                                                             Duration="{StaticResource D.Fast}"
+                                                             EasingFunction="{StaticResource Ease.Out}" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Scale"
+                                                             Storyboard.TargetProperty="ScaleX" To="1"
+                                                             Duration="{StaticResource D.Base}"
+                                                             EasingFunction="{StaticResource Ease.Out}" />
+                                            <DoubleAnimation Storyboard.TargetName="Scale"
+                                                             Storyboard.TargetProperty="ScaleY" To="1"
+                                                             Duration="{StaticResource D.Base}"
+                                                             EasingFunction="{StaticResource Ease.Out}" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource B.Ring}" />
+                            </Trigger>
+                            <!-- Selected is a border plus a check, never colour alone. -->
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource B.Primary}" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource B.PrimarySoft}" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  Padding="0,0,10,0">
+        <StackPanel MaxWidth="880" HorizontalAlignment="Center" Margin="0,0,0,28">
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+                <Button Style="{StaticResource BtnGhost}" Command="{Binding BackCommand}"
+                        Content="&#x2039; Back" Padding="10,6"
+                        AutomationProperties.Name="Back to deck library" />
+            </StackPanel>
+
+            <TextBlock Text="Settings" Style="{StaticResource T.Display}" />
+            <TextBlock Text="Colour is saved with your profile and applies everywhere, straight away."
+                       Style="{StaticResource T.Small}" Margin="0,6,0,0" />
+
+            <!-- Appearance -->
+            <Border Style="{StaticResource Clay}" Padding="24,22" Margin="0,20,0,0">
+                <StackPanel>
+                    <Grid>
+                        <TextBlock Text="Appearance" Style="{StaticResource T.H1}" VerticalAlignment="Center" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                            <Border Style="{StaticResource Chip}" Background="{DynamicResource B.AccentSoft}"
+                                    Margin="0,0,10,0"
+                                    Visibility="{Binding HasStatus, Converter={StaticResource BoolVis}}">
+                                <TextBlock Text="{Binding Status}" Style="{StaticResource T.Label}"
+                                           Foreground="{DynamicResource B.AccentDeep}"
+                                           AutomationProperties.LiveSetting="Polite" />
+                            </Border>
+                            <Border Style="{StaticResource Chip}">
+                                <TextBlock Text="{Binding CurrentName}" Style="{StaticResource T.Label}"
+                                           Foreground="{DynamicResource B.PrimaryDeep}" />
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="Pick the palette the app wears." Style="{StaticResource T.Small}"
+                               Margin="0,4,0,16" />
+
+                    <ItemsControl ItemsSource="{Binding Themes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource ThemeCard}"
+                                        Command="{Binding DataContext.SelectThemeCommand,
+                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding Name}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Swatch strip: background, surface, primary, accent. -->
+                                        <Border Grid.Column="0" Width="60" Height="60" CornerRadius="12"
+                                                Background="{Binding Background}"
+                                                BorderBrush="{Binding Primary}" BorderThickness="2">
+                                            <Grid Margin="6">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*" />
+                                                    <RowDefinition Height="*" />
+                                                </Grid.RowDefinitions>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="4"
+                                                        Background="{Binding Surface}" Margin="0,0,2,2" />
+                                                <Border Grid.Row="0" Grid.Column="1" CornerRadius="4"
+                                                        Background="{Binding Primary}" Margin="2,0,0,2" />
+                                                <Border Grid.Row="1" Grid.Column="0" CornerRadius="4"
+                                                        Background="{Binding Accent}" Margin="0,2,2,0" />
+                                                <Border Grid.Row="1" Grid.Column="1" CornerRadius="4"
+                                                        Background="{Binding Surface}" Margin="2,2,0,0" />
+                                            </Grid>
+                                        </Border>
+
+                                        <StackPanel Grid.Column="1" Margin="14,0,10,0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource T.H2}"
+                                                           FontSize="16.5" VerticalAlignment="Center" />
+                                                <Border Style="{StaticResource Chip}" Margin="8,0,0,0"
+                                                        Padding="8,2" Background="{DynamicResource B.SurfaceAlt}">
+                                                    <TextBlock Text="{Binding Mode}" Style="{StaticResource T.Label}"
+                                                               Foreground="{DynamicResource B.TextMuted}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Blurb}" Style="{StaticResource T.Small}"
+                                                       Margin="0,4,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Check only when selected: shape carries the state. -->
+                                        <Border Grid.Column="2" Width="26" Height="26" CornerRadius="13"
+                                                VerticalAlignment="Center"
+                                                Background="{DynamicResource B.Primary}"
+                                                Visibility="{Binding IsSelected, Converter={StaticResource BoolVis}}">
+                                            <Path Data="M4 10 L8 14 L15 5" Stroke="{DynamicResource B.OnPrimary}"
+                                                  StrokeThickness="2.4" StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                                  Stretch="None" HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Data -->
+            <Border Style="{StaticResource Clay}" Padding="24,22" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="Your data" Style="{StaticResource T.H1}" />
+                    <TextBlock Text="{Binding DeckSummary}" Style="{StaticResource T.Small}" Margin="0,4,0,14" />
+
+                    <TextBlock Text="DATA FOLDER" Style="{StaticResource T.Label}" Margin="2,0,0,6" />
+                    <Border Style="{StaticResource ClayFlat}" Padding="14,11">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding DataPath}" Style="{StaticResource T.Small}"
+                                       Foreground="{DynamicResource B.Text}" TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Style="{StaticResource Btn}" Content="Copy path"
+                                    Command="{Binding CopyPathCommand}" Margin="12,0,0,0" Padding="14,7" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="Decks, cards, review history and the chosen palette live in one JSON file."
+                               Style="{StaticResource T.Small}" Margin="2,10,0,0" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

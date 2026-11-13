@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+publish/
+artifacts/
+*.zip
+
+# Local agent tooling, not part of the app
+.opencode/
+skills-lock.json

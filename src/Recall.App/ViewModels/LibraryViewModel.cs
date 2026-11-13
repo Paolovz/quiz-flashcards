@@ -1,0 +1,289 @@
+using System.Collections.ObjectModel;
+using Recall.Core;
+using Recall.Models;
+using Recall.Services;
+using Recall.Views;
+
+namespace Recall.ViewModels;
+
+public sealed class DayCell
+{
+    public DateTime Date { get; init; }
+    public int Count { get; init; }
+    public int Level => Count == 0 ? 0 : Count < 5 ? 1 : Count < 15 ? 2 : Count < 30 ? 3 : 4;
+    public string Label => $"{Date:ddd d MMM} · {Count} review{(Count == 1 ? "" : "s")}";
+}
+
+public sealed class LibraryViewModel : Observable
+{
+    private readonly INavigator _nav;
+    private readonly Store _store = Store.Instance;
+
+    private bool _isCreating;
+    private string _newName = "";
+    private string _newSubject = "";
+    private string _createError = "";
+    private string _status = "";
+    private bool _nameMissing;
+    private bool _subjectMissing;
+
+    public LibraryViewModel(INavigator nav)
+    {
+        _nav = nav;
+        CreateDeckCommand = new RelayCommand(CreateDeck);
+        NewDeckCommand = new RelayCommand(StartCreate);
+        CancelCommand = new RelayCommand(() =>
+        {
+            IsCreating = false;
+            NewName = "";
+            NewSubject = "";
+            ClearCreateError();
+        });
+        OpenCommand = new RelayCommand(p => { if (p is Deck deck) _nav.ToDeck(deck); });
+        DeleteCommand = new RelayCommand(p => Delete(p as Deck));
+        ImportCommand = new RelayCommand(_nav.ToImport);
+        StudyAllCommand = new RelayCommand(StudyAll);
+        Refresh();
+    }
+
+    public ObservableCollection<Deck> Decks { get; } = new();
+    public ObservableCollection<DayCell> Activity { get; } = new();
+
+    public RelayCommand CreateDeckCommand { get; }
+    public RelayCommand NewDeckCommand { get; }
+    public RelayCommand CancelCommand { get; }
+    public RelayCommand OpenCommand { get; }
+    public RelayCommand DeleteCommand { get; }
+    public RelayCommand ImportCommand { get; }
+    public RelayCommand StudyAllCommand { get; }
+
+    public string Greeting => DateTime.Now.Hour switch
+    {
+        < 12 => "Good morning",
+        < 18 => "Good afternoon",
+        _ => "Good evening"
+    };
+
+    public string Subtitle
+    {
+        get
+        {
+            var decks = _store.Data.Decks.Count;
+            var due = _store.DueTotal;
+            return $"{decks} deck{(decks == 1 ? "" : "s")} · {due} card{(due == 1 ? "" : "s")} due today";
+        }
+    }
+
+    public int DueToday => _store.DueTotal;
+    public int Streak => _store.Streak();
+    public int ReviewsToday => _store.ReviewsToday;
+
+    public string MasteryText
+    {
+        get
+        {
+            var cards = _store.AllCards().ToList();
+            if (cards.Count == 0) return "—";
+            return $"{Math.Round(cards.Average(c => c.Mastery) * 100)}%";
+        }
+    }
+
+    public string TodayHeadline => DueToday == 0 ? "All caught up" : $"{DueToday} card{(DueToday == 1 ? "" : "s")} due";
+    public string TodayBody => DueToday == 0
+        ? "Nothing scheduled. Start a cram session or add new cards."
+        : "Reviews scheduled by the spaced repetition engine.";
+
+    public bool HasDecks => Decks.Count > 0;
+    public bool IsEmpty => Decks.Count == 0;
+
+    public bool IsCreating
+    {
+        get => _isCreating;
+        set => Set(ref _isCreating, value);
+    }
+
+    public string NewName
+    {
+        get => _newName;
+        set
+        {
+            if (!Set(ref _newName, value)) return;
+            ClearCreateError();
+        }
+    }
+
+    public string NewSubject
+    {
+        get => _newSubject;
+        set
+        {
+            if (!Set(ref _newSubject, value)) return;
+            ClearCreateError();
+        }
+    }
+
+    /// Inline validation for the create form: the empty fields go red and one summary
+    /// line under them says what is missing.
+    public string CreateError
+    {
+        get => _createError;
+        private set
+        {
+            if (!Set(ref _createError, value)) return;
+            Raise(nameof(HasCreateError));
+        }
+    }
+
+    public bool HasCreateError => _createError.Length > 0;
+    public string NameTag => _nameMissing ? "invalid" : "";
+    public string SubjectTag => _subjectMissing ? "invalid" : "";
+
+    /// One line that says what just happened. Set after a deck is deleted so the card
+    /// leaving the grid is not the only signal.
+    public string Status
+    {
+        get => _status;
+        private set
+        {
+            if (!Set(ref _status, value)) return;
+            Raise(nameof(HasStatus));
+        }
+    }
+
+    public bool HasStatus => _status.Length > 0;
+
+    private void ClearCreateError()
+    {
+        if (_createError.Length == 0) return;
+        _nameMissing = false;
+        _subjectMissing = false;
+        CreateError = "";
+        Raise(nameof(NameTag));
+        Raise(nameof(SubjectTag));
+    }
+
+    private void SetCreateError(bool nameMissing, bool subjectMissing)
+    {
+        _nameMissing = nameMissing;
+        _subjectMissing = subjectMissing;
+
+        CreateError = (nameMissing, subjectMissing) switch
+        {
+            (true, true) => "Give the deck a name and a subject before creating it.",
+            (true, false) => "Give the deck a name before creating it.",
+            (false, true) => "Give the deck a subject before creating it.",
+            _ => ""
+        };
+
+        Raise(nameof(NameTag));
+        Raise(nameof(SubjectTag));
+    }
+
+    private void Refresh()
+    {
+        Decks.Clear();
+        foreach (var deck in _store.Data.Decks.OrderBy(d => d.Name))
+            Decks.Add(deck);
+
+        BuildActivity();
+
+        Raise(nameof(Subtitle));
+        Raise(nameof(DueToday));
+        Raise(nameof(Streak));
+        Raise(nameof(ReviewsToday));
+        Raise(nameof(MasteryText));
+        Raise(nameof(TodayHeadline));
+        Raise(nameof(TodayBody));
+        Raise(nameof(HasDecks));
+        Raise(nameof(IsEmpty));
+    }
+
+    private void BuildActivity()
+    {
+        Activity.Clear();
+
+        var today = DateTime.Today;
+        var start = today.AddDays(-(int)today.DayOfWeek - 7 * 11);
+
+        // Weekday-major order so a UniformGrid with 7 rows reads as a calendar.
+        for (var weekday = 0; weekday < 7; weekday++)
+        {
+            for (var week = 0; week < 12; week++)
+            {
+                var date = start.AddDays(week * 7 + weekday);
+                Activity.Add(new DayCell
+                {
+                    Date = date,
+                    Count = date > today ? -1 : _store.Data.ReviewsByDay.GetValueOrDefault(date.ToString("yyyy-MM-dd"))
+                });
+            }
+        }
+    }
+
+    private void StartCreate()
+    {
+        NewName = "";
+        NewSubject = "";
+        ClearCreateError();
+        Status = "";
+        IsCreating = true;
+    }
+
+    private void CreateDeck()
+    {
+        var name = NewName.Trim();
+        var subject = NewSubject.Trim();
+
+        if (name.Length == 0 || subject.Length == 0)
+        {
+            SetCreateError(name.Length == 0, subject.Length == 0);
+            return;
+        }
+
+        var deck = new Deck
+        {
+            Name = name,
+            Subject = subject
+        };
+
+        _store.Data.Decks.Add(deck);
+        _store.Save();
+
+        IsCreating = false;
+        NewName = "";
+        NewSubject = "";
+        ClearCreateError();
+        _nav.ToDeck(deck);
+    }
+
+    private void Delete(Deck? deck)
+    {
+        if (deck is null) return;
+
+        var cards = deck.Cards.Count;
+        var detail = cards == 0
+            ? "The deck is empty, so nothing else goes with it."
+            : $"{cards} card{(cards == 1 ? "" : "s")} and their review history go with it.";
+
+        if (!ConfirmWindow.Ask(
+                $"Delete \u201C{deck.Name}\u201D?",
+                $"{detail} This cannot be undone.",
+                "Delete deck"))
+            return;
+
+        _store.Data.Decks.Remove(deck);
+        _store.Save();
+        Refresh();
+        Status = $"\u201C{deck.Name}\u201D deleted.";
+    }
+
+    private void StudyAll()
+    {
+        var cards = _store.AllDue().ToList();
+        if (cards.Count == 0) cards = _store.AllCards().ToList();
+        if (cards.Count == 0) return;
+
+        var queue = Session.Build(cards, 20);
+        _nav.ToStudy(null, queue, quiz: false);
+    }
+}
