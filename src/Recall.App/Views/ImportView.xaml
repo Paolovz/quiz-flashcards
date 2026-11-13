@@ -145,7 +145,7 @@
                     <TextBlock Text="Nothing loaded yet" Style="{StaticResource T.H2}" HorizontalAlignment="Center" />
                     <TextBlock Style="{StaticResource T.Small}" HorizontalAlignment="Center" Margin="0,6,0,0"
                                MaxWidth="420" TextAlignment="Center"
-                               Text="Pick a PDF with a real text layer â€” scanned images need OCR first. Then review the extracted cards and add the ones you want." />
+                               Text="Pick a PDF with a real text layer — scanned images need OCR first. Then review the extracted cards and add the ones you want." />
                     <Button Style="{StaticResource BtnPrimary}" Content="Choose PDF" Margin="0,16,0,0"
                             HorizontalAlignment="Center" Command="{Binding ChooseFileCommand}" />
                     <TextBlock Text="{Binding Status}" Style="{StaticResource T.Small}"

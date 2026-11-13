@@ -21,7 +21,12 @@ public partial class StudyView : UserControl
         var key = e.Key;
         var handled = true;
 
-        if (key is Key.Space or Key.Enter)
+        // Ctrl+Z takes back the last grade, the way it takes back an edit anywhere else.
+        if (key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            if (vm.UndoCommand.CanExecute(null)) vm.UndoCommand.Execute(null);
+        }
+        else if (key is Key.Space or Key.Enter)
         {
             if (vm.Revealed) vm.GoodCommand.Execute(null);
             else vm.RevealCommand.Execute(null);

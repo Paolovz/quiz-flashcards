@@ -92,4 +92,14 @@ public static partial class TextMatch
                      .ToArray();
         return string.Join(' ', parts);
     }
+
+    /// <summary>
+    /// The term an answer is stored under: everything before the first separator. Used to
+    /// keep a multiple choice list from offering "mitochondria" next to "Mitochondrion".
+    /// </summary>
+    public static string KeyTerm(string? answer)
+    {
+        if (string.IsNullOrWhiteSpace(answer)) return "";
+        return StripArticles(Normalize(KeyBreak().Split(answer, 2)[0]));
+    }
 }

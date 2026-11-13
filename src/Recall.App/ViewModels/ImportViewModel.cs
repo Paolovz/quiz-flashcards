@@ -292,17 +292,11 @@ public sealed class ImportViewModel : Observable
             if (kind is CardKind.MultipleChoice or CardKind.MultiSelect)
             {
                 var answer = draft.Back.Trim();
-                var choices = new List<string> { answer };
 
-                // Prefer decoys close in length to the answer: a four-word option next to a
-                // two-line definition gives the answer away by shape alone.
-                foreach (var decoy in answers
-                             .Where(a => !string.Equals(a, answer, StringComparison.OrdinalIgnoreCase))
-                             .OrderBy(a => Math.Abs(a.Length - answer.Length))
-                             .Take(3))
-                {
-                    choices.Add(decoy);
-                }
+                // Decoys are real answers from this document, filtered the same way the
+                // quiz filters them, so a list never offers two spellings of one answer.
+                var choices = new List<string> { answer };
+                choices.AddRange(QuizFactory.PickDistractors(answer, answers));
 
                 if (choices.Count < 2)
                 {

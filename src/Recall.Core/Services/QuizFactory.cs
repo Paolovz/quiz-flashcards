@@ -69,6 +69,28 @@ public static class QuizFactory
         };
     }
 
+    /// <summary>
+    /// Decoys for a recognition question, taken from the deck's own answers. An option
+    /// list is only fair when every wrong option is a genuinely different answer, so a
+    /// boolean, a stub, a second spelling of the answer, or an answer that contains the
+    /// answer is dropped. The rest are sorted by length so the correct option is not
+    /// given away by being the only paragraph in a list of four words.
+    /// </summary>
+    public static List<string> PickDistractors(string answer, IEnumerable<string> pool, int count = 3)
+    {
+        return Shuffle(pool
+                .Where(a => !string.IsNullOrWhiteSpace(a))
+                .Select(a => a.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList())
+            .Where(a => !IsBooleanish(a))
+            .Where(a => a.Length >= 3)
+            .Where(a => !TooClose(answer, a))
+            .OrderBy(a => Math.Abs(a.Length - answer.Length))
+            .Take(count)
+            .ToList();
+    }
+
     /// Exactly one correct option. The row is shuffled and the key is carried across.
     private static QuizQuestion SingleChoice(Card card)
     {
@@ -173,9 +195,7 @@ public static class QuizFactory
         if (answer.Length == 0)
             return new QuizQuestion { Card = card, Prompt = card.Front };
 
-        var pool = answers
-            .Where(a => !string.Equals(a, answer, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var pool = PickDistractors(answer, answers);
 
         var words = answer.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
 
@@ -186,9 +206,7 @@ public static class QuizFactory
         if (typeIt || pool.Count < 1)
             return new QuizQuestion { Card = card, Prompt = card.Front };
 
-        var distractors = Shuffle(pool).Take(3).ToList();
-
-        var options = Shuffle(distractors.Append(answer).ToList()).ToArray();
+        var options = Shuffle(pool.Append(answer).ToList()).ToArray();
 
         var correct = Array.FindIndex(options, o => string.Equals(o, answer, StringComparison.OrdinalIgnoreCase));
 
@@ -200,22 +218,98 @@ public static class QuizFactory
             CorrectIndex = correct
         };
     }
+
+    /// <summary>"True" is a valid option on a true/false card and nonsense on every other.</summary>
+    private static bool IsBooleanish(string value)
+    {
+        var v = value.Trim();
+        return v.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || v.Equals("false", StringComparison.OrdinalIgnoreCase)
+            || v.Equals("yes", StringComparison.OrdinalIgnoreCase)
+            || v.Equals("no", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A distractor has to be a different answer. "Mitochondrion", "mitochondria" and
+    /// "Mitochondria, the site of aerobic respiration" are one answer written three ways.
+    /// </summary>
+    private static bool TooClose(string answer, string candidate)
+    {
+        var a = TextMatch.Normalize(answer);
+        var b = TextMatch.Normalize(candidate);
+        if (a.Length == 0 || b.Length == 0) return true;
+        if (a == b) return true;
+        if (a.Contains(b, StringComparison.Ordinal) || b.Contains(a, StringComparison.Ordinal)) return true;
+
+        // Singular and plural, or a one-letter slip: the same word twice on one list.
+        if (SharedPrefix(a, b) >= 6 && EditDistance(a, b) <= 2) return true;
+
+        var keyA = TextMatch.KeyTerm(answer);
+        var keyB = TextMatch.KeyTerm(candidate);
+        if (keyA.Length < 4 || keyB.Length < 4) return false;
+
+        return keyA == keyB
+               || keyA.Contains(keyB, StringComparison.Ordinal)
+               || keyB.Contains(keyA, StringComparison.Ordinal);
+    }
+
+    private static int SharedPrefix(string a, string b)
+    {
+        var limit = Math.Min(a.Length, b.Length);
+        var i = 0;
+        while (i < limit && a[i] == b[i]) i++;
+        return i;
+    }
+
+    /// <summary>Levenshtein distance, abandoned as soon as it passes the ceiling.</summary>
+    private static int EditDistance(string a, string b, int ceiling = 2)
+    {
+        if (Math.Abs(a.Length - b.Length) > ceiling) return ceiling + 1;
+
+        var previous = new int[b.Length + 1];
+        var current = new int[b.Length + 1];
+        for (var j = 0; j <= b.Length; j++) previous[j] = j;
+
+        for (var i = 1; i <= a.Length; i++)
+        {
+            current[0] = i;
+            var rowMin = i;
+
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                current[j] = Math.Min(
+                    Math.Min(current[j - 1] + 1, previous[j] + 1),
+                    previous[j - 1] + cost);
+
+                if (current[j] < rowMin) rowMin = current[j];
+            }
+
+            if (rowMin > ceiling) return ceiling + 1;
+            (previous, current) = (current, previous);
+        }
+
+        return previous[b.Length];
+    }
 }
 
 public static class Session
 {
     /// Due cards first (oldest due date first); when nothing is due, the whole deck
-    /// becomes a cram session so the button never dead-ends.
+    /// becomes a cram session so the button never dead-ends. Suspended cards stay out.
     public static List<Card> Build(IReadOnlyList<Card> cards, int limit)
     {
         var now = DateTime.Now;
-        var due = cards
+        var live = cards.Where(c => !c.Suspended).ToList();
+        if (live.Count == 0) return new List<Card>();
+
+        var due = live
             .Where(c => c.IsDue(now))
             .OrderBy(c => c.Due ?? DateTime.MaxValue) // never-seen cards go last
             .ThenBy(_ => Random.Shared.Next())
             .ToList();
 
-        var queue = due.Count > 0 ? due : cards.OrderBy(_ => Random.Shared.Next()).ToList();
+        var queue = due.Count > 0 ? due : live.OrderBy(_ => Random.Shared.Next()).ToList();
         return queue.Take(Math.Max(1, limit)).ToList();
     }
 }

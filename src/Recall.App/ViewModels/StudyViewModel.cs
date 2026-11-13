@@ -16,6 +16,14 @@ public sealed class StudyViewModel : Observable
 
     private int _index;
     private bool _revealed;
+    private string _notice = "";
+
+    /// Snapshot taken before each grade so the last one can be taken back.
+    private readonly record struct CardState(
+        double Ease, int IntervalDays, int Reps, int Lapses, DateTime? Due,
+        int Correct, int Attempts, bool Suspended);
+
+    private readonly Stack<(Card Card, CardState State, bool Correct)> _history = new();
 
     public StudyViewModel(INavigator nav, Deck? deck, IReadOnlyList<Card> cards, string title)
     {
@@ -28,7 +36,9 @@ public sealed class StudyViewModel : Observable
         AgainCommand = new RelayCommand(() => Grade(Services.Grade.Again), () => Revealed);
         HardCommand = new RelayCommand(() => Grade(Services.Grade.Hard), () => Revealed);
         GoodCommand = new RelayCommand(() => Grade(Services.Grade.Good), () => Revealed);
-        EasyCommand = new RelayCommand(() => Grade(Services.Grade.Easy), () => Revealed);        ExitCommand = new RelayCommand(() => _nav.ToDeck(_deck!));
+        EasyCommand = new RelayCommand(() => Grade(Services.Grade.Easy), () => Revealed);
+        UndoCommand = new RelayCommand(Undo, () => _history.Count > 0);
+        ExitCommand = new RelayCommand(() => _nav.ToDeck(_deck!));
 
         if (_queue.Count == 0) Finish();
     }
@@ -38,7 +48,21 @@ public sealed class StudyViewModel : Observable
     public RelayCommand HardCommand { get; }
     public RelayCommand GoodCommand { get; }
     public RelayCommand EasyCommand { get; }
+    public RelayCommand UndoCommand { get; }
     public RelayCommand ExitCommand { get; }
+
+    /// One line about what just happened to the card, e.g. a leech being suspended.
+    public string Notice
+    {
+        get => _notice;
+        private set
+        {
+            if (!Set(ref _notice, value)) return;
+            Raise(nameof(HasNotice));
+        }
+    }
+
+    public bool HasNotice => _notice.Length > 0;
 
     public Card? Current => _index < _queue.Count ? _queue[_index] : null;
 
@@ -85,9 +109,22 @@ public sealed class StudyViewModel : Observable
         if (Current is null) return;
 
         var card = Current;
-        Srs.Apply(card, grade, DateTime.Now);
+        var state = new CardState(
+            card.Ease, card.IntervalDays, card.Reps, card.Lapses, card.Due,
+            card.Correct, card.Attempts, card.Suspended);
+
+        var suspended = Srs.Apply(card, grade, DateTime.Now);
         Store.Instance.LogReview();
         _graded.Add((card, grade != Services.Grade.Again));
+        _history.Push((card, state, grade != Services.Grade.Again));
+        UndoCommand.RaiseCanExecuteChanged();
+
+        // The due counter in the title bar has to tick down as the session runs.
+        _nav.RefreshHeader();
+
+        Notice = suspended
+            ? "Suspended after repeated lapses. Edit the card, then unsuspend it in the deck."
+            : "";
 
         _index++;
         Revealed = false;
@@ -98,6 +135,42 @@ public sealed class StudyViewModel : Observable
             return;
         }
 
+        RaiseCurrent();
+    }
+
+    /// <summary>
+    /// Takes back the last grade: the card's scheduling state, its counters and the
+    /// session tally all go back to what they were, and the question comes back on screen.
+    /// </summary>
+    private void Undo()
+    {
+        if (_history.Count == 0 || Current is null) return;
+
+        var (card, state, _) = _history.Pop();
+
+        card.Ease = state.Ease;
+        card.IntervalDays = state.IntervalDays;
+        card.Reps = state.Reps;
+        card.Lapses = state.Lapses;
+        card.Due = state.Due;
+        card.Correct = state.Correct;
+        card.Attempts = state.Attempts;
+        card.Suspended = state.Suspended;
+
+        Store.Instance.UnlogReview();
+
+        if (_graded.Count > 0) _graded.RemoveAt(_graded.Count - 1);
+        if (_index > 0) _index--;
+
+        UndoCommand.RaiseCanExecuteChanged();
+        _nav.RefreshHeader();
+        Notice = "";
+        Revealed = true;
+        RaiseCurrent();
+    }
+
+    private void RaiseCurrent()
+    {
         Raise(nameof(Current));
         Raise(nameof(FrontText));
         Raise(nameof(BackText));

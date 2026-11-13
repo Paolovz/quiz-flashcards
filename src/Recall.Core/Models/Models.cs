@@ -23,10 +23,15 @@ public sealed class MatchPair
     public string Right { get; set; } = "";
 }
 
-public sealed class Card
+public sealed class Card : System.ComponentModel.INotifyPropertyChanged
 {
     private static readonly System.Text.RegularExpressions.Regex BlankGap =
         new(@"\{\{(.+?)\}\}", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    private void Raise(string name)
+        => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
 
     public Guid Id { get; set; } = Guid.NewGuid();
     public CardKind Kind { get; set; } = CardKind.Qa;
@@ -35,6 +40,37 @@ public sealed class Card
     public string Back { get; set; } = "";
     public string? Hint { get; set; }
     public string? Source { get; set; }
+
+    /// Space-separated tags, Anki style. Search matches them.
+    public string? Tags { get; set; }
+
+    /// Starred cards can be studied on their own, the way Quizlet stars a term.
+    public bool Starred
+    {
+        get => _starred;
+        set
+        {
+            if (_starred == value) return;
+            _starred = value;
+            Raise(nameof(Starred));
+        }
+    }
+
+    /// A leech that kept lapsing is pulled out of the rotation until it is unsuspended.
+    public bool Suspended
+    {
+        get => _suspended;
+        set
+        {
+            if (_suspended == value) return;
+            _suspended = value;
+            Raise(nameof(Suspended));
+            Raise(nameof(StatusLabel));
+        }
+    }
+
+    private bool _starred;
+    private bool _suspended;
 
     // MultiSelect: choices plus the indexes of the correct ones.
     public List<string> Choices { get; set; } = new();
@@ -71,6 +107,19 @@ public sealed class Card
 
     [JsonIgnore]
     public bool IsNew => Attempts == 0;
+
+    [JsonIgnore]
+    public string[] TagList => (Tags ?? "")
+        .Split(new[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    [JsonIgnore]
+    public bool IsLeech => Lapses >= SrsLeechThreshold;
+
+    /// A card that lapsed this many times is pulled out of rotation, as Anki does.
+    public const int SrsLeechThreshold = 8;
+
+    [JsonIgnore]
+    public string StatusLabel => Suspended ? "Suspended" : IsNew ? "New" : DueLabel;
 
     [JsonIgnore]
     public double Mastery => Attempts == 0
@@ -124,8 +173,10 @@ public sealed class Deck
     public DateTime Created { get; set; } = DateTime.Now;
     public List<Card> Cards { get; set; } = new();
 
-    [JsonIgnore] public int DueCount => Cards.Count(c => c.IsDue(DateTime.Now));
-    [JsonIgnore] public int NewCount => Cards.Count(c => c.IsNew);
+    [JsonIgnore] public int DueCount => Cards.Count(c => !c.Suspended && c.IsDue(DateTime.Now));
+    [JsonIgnore] public int NewCount => Cards.Count(c => !c.Suspended && c.IsNew);
+    [JsonIgnore] public int StarredCount => Cards.Count(c => c.Starred);
+    [JsonIgnore] public int SuspendedCount => Cards.Count(c => c.Suspended);
     [JsonIgnore] public double Mastery => Cards.Count == 0 ? 0 : Cards.Average(c => c.Mastery);
     [JsonIgnore] public int Reviews => Cards.Sum(c => c.Attempts);
     [JsonIgnore] public string CountLabel => Cards.Count == 1 ? "1 card" : $"{Cards.Count} cards";

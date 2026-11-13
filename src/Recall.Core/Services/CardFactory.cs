@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Recall.Services;
@@ -6,13 +7,17 @@ public sealed record DraftCard(string Front, string Back, string? Source, string
 
 /// <summary>
 /// Deterministic card extraction. Every card is quoted from the source text, so a card
-/// can't claim something the document didn't say. Definition patterns run first, then
-/// cloze deletion covers the remaining prose.
+/// can't claim something the document didn't say. The order is: a heading or bold run
+/// followed by prose becomes a term/definition card, then an inline "term: definition"
+/// line, then a copula sentence, and cloze only over a term the document already
+/// established. Anything that looks like code, a caption, a page number, or a reference
+/// list is dropped before any of that runs.
 /// </summary>
 public static partial class CardFactory
 {
     private const int MaxFront = 90;
     private const int MaxBack = 260;
+    private const int MaxTermWords = 7;
 
     [GeneratedRegex(@"(\w)-\n(\w)")]
     private static partial Regex HyphenBreak();
@@ -29,13 +34,65 @@ public static partial class CardFactory
     [GeneratedRegex(@"(?<=[.!?])\s+(?=[A-Z0-9""'(])")]
     private static partial Regex SentenceSplit();
 
-    [GeneratedRegex(@"^\s*(?:[•▪◦*·\-–—]|\(?\d{1,2}[.)]|[a-zA-Z][.)])\s+")]
+    [GeneratedRegex(@"^\s*(?:[\u2022\u25aa\u25e6*·\-\u2013\u2014]|\(?\d{1,2}[.)]|[a-zA-Z][.)]|o)\s+")]
     private static partial Regex BulletMarker();
+
+    [GeneratedRegex(@"[{};]|//|\b(?:public|private|protected|static|void|class|new|return)\b\s*\w*\s*[({=]")]
+    private static partial Regex CodeShaped();
+
+    [GeneratedRegex(@"^(?:figure|fig\.?|table|chart|diagram|exhibit)\s*[\d.]*", RegexOptions.IgnoreCase)]
+    private static partial Regex Caption();
+
+    [GeneratedRegex(@"^(?:references?|bibliography|works cited|further reading|sources)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex ReferenceHeading();
+
+    [GeneratedRegex(@"^(?:https?://|www\.)|\S+@\S+\.\w+", RegexOptions.IgnoreCase)]
+    private static partial Regex UrlOrEmail();
 
     private static readonly string[] Abbreviations =
     {
         "e.g.", "i.e.", "et al.", "vs.", "Fig.", "fig.", "No.", "no.", "Dr.", "Mr.", "Mrs.", "Ms.",
         "Prof.", "St.", "approx.", "cf.", "Eq.", "Sec.", "Ch.", "pp.", "p."
+    };
+
+    /// <summary>Words that open a clause, never a term. A front starting with one is prose.</summary>
+    private static readonly HashSet<string> LeadInWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "what", "which", "who", "whom", "whose", "when", "where", "why", "how", "solution", "answer",
+        "example", "examples", "figure", "fig", "table", "chapter", "section", "part", "unit",
+        "references", "bibliography", "note", "notes", "step", "steps", "given", "since", "then",
+        "now", "also", "however", "therefore", "thus", "hence", "finally", "first", "second", "third",
+        "next", "below", "above", "following", "instead", "moreover", "furthermore", "consider",
+        "suppose", "assume", "let", "we", "you", "they", "it", "this", "these", "those", "there",
+        "here", "in", "on", "at", "for", "from", "with", "by", "to", "of", "as", "if", "so", "but",
+        "and", "or", "because", "while", "after", "before", "during", "through", "within", "between",
+        "using", "define", "defining", "use", "lets", "try", "see", "shown", "showing"
+    };
+
+    /// <summary>Words that mark a fragment rather than a term: if the front contains one, it is a clause.</summary>
+    private static readonly string[] ClauseMarkers =
+    {
+        " that ", " which ", " who ", " whose ", " where ", " when ", " because ", " while ",
+        " and ", " or ", " but ", " is ", " are ", " was ", " were ", " has ", " have ", " had ",
+        " can ", " will ", " would ", " should ", " may ", " might ", " must ", " to ", " of the "
+    };
+
+    /// <summary>Definition text that is a fragment of the sentence before it, not a definition.</summary>
+    private static readonly string[] DefLeadIns =
+    {
+        "not ", "in this case", "given", "also ", "then ", "instead", "however",
+        "therefore", "thus ", "this is ", "these are ", "it is ", "there are ", "there is "
+    };
+
+    /// <summary>
+    /// A sentence that talks about the sample on the page, not about the subject.
+    /// "The following class ____ shows an example..." asks about a variable name.
+    /// </summary>
+    private static readonly string[] ExampleLeadIns =
+    {
+        "the following", "following example", "given example", "example below", "below shows",
+        "as shown", "the statement", "is declared", "are declared", "in this example",
+        "the example", "the sample", "sample program", "the output", "the program below"
     };
 
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
@@ -44,8 +101,33 @@ public static partial class CardFactory
         "have", "will", "would", "could", "should", "about", "into", "than", "then", "them", "they",
         "when", "where", "while", "because", "between", "within", "after", "before", "other", "each",
         "such", "also", "been", "being", "were", "what", "your", "more", "most", "some", "many",
-        "very", "only", "over", "under", "both", "does", "used", "using", "called", "same", "such",
+        "very", "only", "over", "under", "both", "does", "used", "using", "called", "same",
         "made", "make", "like", "just", "even", "well", "much", "through"
+    };
+
+    /// <summary>Answers that carry no information as a blank.</summary>
+    private static readonly HashSet<string> EmptyAnswers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "automatically", "respectively", "dynamically", "accessible", "respective", "expressions",
+        "returning", "represented", "represents", "invoked", "called", "defined", "created", "given",
+        "following", "different", "various", "certain", "several", "usually", "generally", "often",
+        "sometimes", "typically", "simply", "easily", "directly", "actually", "basically", "really",
+        "approximately", "almost", "nearly", "roughly", "respectively",
+        "one", "two", "three", "more", "less", "same", "other", "another", "each", "every"
+    };
+
+    private static readonly string[] Determiners =
+    {
+        "the ", "a ", "an ", "this ", "these ", "those ", "its ", "their "
+    };
+
+    /// <summary>Words that end a blank that swallowed the next word: "Constructors with".</summary>
+    private static readonly HashSet<string> TrailingWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "with", "of", "and", "or", "to", "for", "in", "on", "at", "by", "from", "that", "which",
+        "is", "are", "was", "were", "be", "been", "can", "will", "would", "should", "may", "might",
+        "must", "has", "have", "had", "help", "helps", "used", "use", "show", "shows", "make",
+        "makes", "give", "gives", "include", "includes", "contain", "contains", "allow", "allows"
     };
 
     private static readonly Regex DefinitionIs = new(
@@ -61,51 +143,235 @@ public static partial class CardFactory
         RegexOptions.Compiled);
 
     private static readonly Regex DefinitionDash = new(
-        @"^(?<term>[^—–]{2,60}?)\s+[—–]\s+(?<def>.{15,240})$",
+        @"^(?<term>[^\u2014\u2013]{2,60}?)\s+[\u2014\u2013]\s+(?<def>.{15,240})$",
         RegexOptions.Compiled);
 
     private static readonly Regex DefinitionCalled = new(
         @"^(?<def>.{15,200}?)\s+(?:is|are)\s+called\s+(?<term>[^,.;]{2,50})$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    /// <summary>
+    /// Turns PDF lines into paragraphs: drops running headers, footers, page numbers,
+    /// captions, reference lists and code, then rejoins lines that were only wrapped.
+    /// </summary>
+    public static List<PdfLine> PrepareDocument(IReadOnlyList<PdfLine> lines)
+    {
+        // A header or footer sits at the same text on many pages. Count across the document.
+        var repeats = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in lines)
+        {
+            var key = line.Text.Trim();
+            if (key.Length is > 0 and < 80)
+                repeats[key] = repeats.GetValueOrDefault(key) + 1;
+        }
+
+        var kept = new List<PdfLine>(lines.Count);
+        var inReferences = false;
+
+        foreach (var line in lines)
+        {
+            var text = line.Text.Trim();
+            if (text.Length == 0) continue;
+
+            if (ReferenceHeading().IsMatch(text)) { inReferences = true; continue; }
+            if (inReferences) continue;
+
+            if (repeats.TryGetValue(text, out var seen) && seen > 2 && text.Length < 80) continue;
+            if (PageNumberOnly().IsMatch(text)) continue;
+            if (Caption().IsMatch(text)) continue;
+            if (UrlOrEmail().IsMatch(text)) continue;
+            if (CodeShaped().IsMatch(text)) continue;
+            if (text.Length < 3) continue;
+
+            kept.Add(line with { Text = BulletMarker().Replace(text, "", 1).Trim() });
+        }
+
+        return MergeWrapped(kept);
+    }
+
+    /// <summary>A body line that does not end a sentence continues on the next line.</summary>
+    private static List<PdfLine> MergeWrapped(List<PdfLine> lines)
+    {
+        var merged = new List<PdfLine>(lines.Count);
+        PdfLine? pending = null;
+
+        foreach (var line in lines)
+        {
+            if (pending is null) { pending = line; continue; }
+
+            var sameBlock = line.Page == pending.Page
+                            && Math.Abs(line.Size - pending.Size) < 0.6
+                            && (Math.Abs(line.BoldRatio - pending.BoldRatio) < 0.35
+                                || char.IsLower(line.Text[0]));
+
+            var open = pending.Text.Length > 0 && !".!?:\"".Contains(pending.Text[^1]);
+
+            if (sameBlock && open)
+            {
+                pending = pending with { Text = Join(pending.Text, line.Text) };
+                continue;
+            }
+
+            merged.Add(pending);
+            pending = line;
+        }
+
+        if (pending is not null) merged.Add(pending);
+        return merged;
+    }
+
+    private static string Join(string left, string right)
+    {
+        if (left.EndsWith('-') && right.Length > 0 && char.IsLower(right[0]))
+            return left[..^1] + right;
+        return left + " " + right;
+    }
+
     public static List<DraftCard> FromText(string? raw, int max, string? source = null)
     {
         if (string.IsNullOrWhiteSpace(raw) || max <= 0) return new List<DraftCard>();
 
         var text = Clean(raw);
-        var sentences = SplitSentences(text);
+        var lines = text.Split('\n')
+            .Select(t => new PdfLine(0, t.Trim(), 0, 0, 0))
+            .Where(l => l.Text.Length > 0)
+            .ToList();
+
+        return FromLines(lines, max, source);
+    }
+
+    /// <summary>Extracts cards from one page of prepared lines.</summary>
+    public static List<DraftCard> FromLines(IReadOnlyList<PdfLine> lines, int max, string? source = null)
+    {
+        if (max <= 0 || lines.Count == 0) return new List<DraftCard>();
+
+        var body = BodySize(lines);
         var drafts = new List<DraftCard>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var usedByDefinition = new HashSet<int>();
+        var terms = CollectTerms(lines, body);
         var order = 0;
 
-        for (var i = 0; i < sentences.Count; i++)
+        // 1. A heading or bold line with prose under it.
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            if (!IsTermLine(line, body)) continue;
+            if (i + 1 >= lines.Count) continue;
+
+            var next = lines[i + 1];
+            if (next.Page != line.Page) continue;
+            if (IsTermLine(next, body)) continue;
+            if (next.Text.Length < 20) continue;
+
+            var term = TidyTerm(line.Text);
+            var def = TidyDefinition(DefinitionFrom(lines, i + 1, body), term);
+            if (!IsUsableTerm(term) || !IsUsableDefinition(def, term)) continue;
+
+            order++;
+            Add(new DraftCard(term, def, source, "definition", 1.4, order), drafts, seen);
+        }
+
+        // 2. Prose: inline definitions first, then copula sentences, then cloze.
+        var sentences = SplitSentences(string.Join('\n', lines.Select(l => l.Text)));
+        var alreadyDefined = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var sentence in sentences)
         {
             order++;
-            if (TryDefinition(sentences[i], out var draft))
-            {
-                Add(draft with { Order = order, Source = source }, drafts, seen);
-                usedByDefinition.Add(i);
-            }
+            if (!TryDefinition(sentence, out var draft)) continue;
+
+            // The same sentence must not come back as a cloze card: one sentence, one card.
+            alreadyDefined.Add(TextMatch.Normalize(sentence));
+            Add(draft with { Order = order, Source = source }, drafts, seen);
         }
 
         if (drafts.Count < max)
         {
-            for (var i = 0; i < sentences.Count; i++)
+            foreach (var sentence in sentences)
             {
-                if (usedByDefinition.Contains(i)) continue; // already covered by a definition card
-                order++;
                 if (drafts.Count >= max * 2) break;
-                if (TryCloze(sentences[i], out var draft))
+                if (alreadyDefined.Contains(TextMatch.Normalize(sentence))) continue;
+                order++;
+                if (TryCloze(sentence, terms, out var draft))
                     Add(draft with { Order = order, Source = source }, drafts, seen);
             }
         }
 
-        return drafts
+        return Dedupe(drafts)
             .OrderByDescending(d => d.Score)
             .ThenBy(d => d.Order)
             .Take(max)
             .ToList();
+    }
+
+    /// <summary>
+    /// "Uniform Probability Distribution" and "Uniform distribution (aka Rectangular
+    /// probability distribution)" are one card. Keep the higher scoring of the two.
+    /// </summary>
+    private static List<DraftCard> Dedupe(List<DraftCard> drafts)
+    {
+        var kept = new List<DraftCard>(drafts.Count);
+
+        foreach (var draft in drafts.OrderByDescending(d => d.Score).ThenBy(d => d.Order))
+        {
+            var tokens = Tokens(draft.Front);
+
+            var duplicate = kept.Any(k =>
+            {
+                var other = Tokens(k.Front);
+
+                // Intersect uses the default comparer, so pass the case-insensitive one.
+                var shared = tokens.Intersect(other, StringComparer.OrdinalIgnoreCase).Count();
+
+                // "constructor" and "Constructors" are one card even though each has a
+                // single token, which the overlap ratio below would never reach.
+                if (tokens.Count == 1 && other.Count == 1) return shared == 1;
+
+                if (tokens.Count < 2 || other.Count < 2) return false;
+                return shared >= 2 && shared >= Math.Min(tokens.Count, other.Count) * 0.75;
+            });
+
+            if (!duplicate) kept.Add(draft);
+        }
+
+        return kept;
+    }
+
+    private static HashSet<string> Tokens(string text)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var word in Regex.Split(text, @"[^A-Za-z]+"))
+        {
+            if (word.Length < 3) continue;
+            if (StopWords.Contains(word)) continue;
+            set.Add(word.EndsWith("ss", StringComparison.Ordinal) || !word.EndsWith('s') ? word : word[..^1]);
+        }
+        return set;
+    }
+
+    /// <summary>
+    /// The definition under a term is the prose that follows it, up to the end of the first
+    /// sentence. Stopping at one line leaves "for a." on the card.
+    /// </summary>
+    private static string DefinitionFrom(IReadOnlyList<PdfLine> lines, int start, double body)
+    {
+        var sb = new StringBuilder();
+        var page = lines[start].Page;
+
+        for (var i = start; i < lines.Count && i < start + 4; i++)
+        {
+            var line = lines[i];
+            if (line.Page != page) break;
+            if (i > start && IsTermLine(line, body)) break;
+
+            if (sb.Length > 0) sb.Append(' ');
+            sb.Append(line.Text);
+
+            if (sb.Length >= 40 && ".!?".Contains(sb[^1])) break;
+            if (sb.Length >= MaxBack) break;
+        }
+
+        return sb.ToString();
     }
 
     private static void Add(DraftCard draft, List<DraftCard> drafts, HashSet<string> seen)
@@ -115,6 +381,43 @@ public static partial class CardFactory
         drafts.Add(draft);
     }
 
+    /// <summary>The size most of the prose is set in. Headings are bigger than this.</summary>
+    private static double BodySize(IReadOnlyList<PdfLine> lines)
+    {
+        var weighted = lines
+            .Where(l => l.Text.Length >= 25 && l.Size > 0)
+            .GroupBy(l => Math.Round(l.Size, 1))
+            .Select(g => (Size: g.Key, Chars: g.Sum(l => l.Text.Length)))
+            .OrderByDescending(g => g.Chars)
+            .ToList();
+
+        return weighted.Count == 0 ? 0 : weighted[0].Size;
+    }
+
+    private static bool IsTermLine(PdfLine line, double body)
+    {
+        var text = line.Text.Trim();
+        if (text.Length is < 2 or > 70) return false;
+        if (text[^1] is '.' or ',' or ';' or '?' or '!') return false;
+        if (text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > MaxTermWords) return false;
+
+        var larger = body > 0 && line.Size >= body * 1.12;
+        return larger || line.IsBold;
+    }
+
+    /// <summary>Terms the document itself highlighted. Cloze only blanks one of these.</summary>
+    private static HashSet<string> CollectTerms(IReadOnlyList<PdfLine> lines, double body)
+    {
+        var terms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in lines)
+        {
+            if (!IsTermLine(line, body)) continue;
+            var term = TidyTerm(line.Text);
+            if (IsUsableTerm(term)) terms.Add(term);
+        }
+        return terms;
+    }
+
     public static string Clean(string raw)
     {
         var text = raw.Replace("\r\n", "\n").Replace('\r', '\n');
@@ -122,7 +425,7 @@ public static partial class CardFactory
 
         var lines = text.Split('\n');
 
-        // Running headers and footers repeat on every page; drop them.
+        // Running headers and footers repeat; drop them.
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var line in lines)
         {
@@ -137,18 +440,10 @@ public static partial class CardFactory
             var key = line.Trim();
             if (key.Length is > 0 and < 80 && counts[key] > 2) continue;
             if (PageNumberOnly().IsMatch(key)) continue;
+            if (Caption().IsMatch(key)) continue;
+            if (ReferenceHeading().IsMatch(key)) continue;
 
-            var stripped = StripBullet(key);
-            if (LooksLikeHeading(stripped))
-            {
-                // A heading glued to body text yields terms like "Chapter 4 Mitochondria".
-                kept.Add("");
-                kept.Add(stripped);
-                kept.Add("");
-                continue;
-            }
-
-            kept.Add(stripped);
+            kept.Add(BulletMarker().Replace(key, "", 1).Trim());
         }
 
         text = string.Join('\n', kept);
@@ -184,47 +479,33 @@ public static partial class CardFactory
         return sentences;
     }
 
-    private static string StripBullet(string line)
-    {
-        var stripped = BulletMarker().Replace(line, "", 1).Trim();
-        return stripped.Length > 0 ? stripped : line;
-    }
-
-    private static bool LooksLikeHeading(string line)
-    {
-        if (line.Length is 0 or > 70) return false;
-        if (line[^1] is '.' or ',' or ';' or ':') return false;
-
-        var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length is 0 or > 9) return false;
-
-        // "Biology 101 - Chapter 4" style course headers
-        if (words.Length <= 6 && line.Length <= 50 && line.Any(char.IsDigit)) return true;
-
-        var capitalised = words.Count(w => w.Length > 0 && char.IsUpper(w[0]));
-        return capitalised >= 2 && capitalised >= words.Length - 1;
-    }
-
     private static bool TryDefinition(string sentence, out DraftCard draft)
     {
         draft = new DraftCard("", "", null, "definition", 0, 0);
         var s = sentence.Trim().TrimEnd('.');
         if (s.Length < 30) return false;
+        if (s.Contains('?')) return false;
+        if (CodeShaped().IsMatch(s)) return false;
 
         string term;
         string def;
+        double score;
 
         if (TryMatch(DefinitionCalled, s, out var calledDef, out var calledTerm, invert: true))
         {
             term = calledTerm;
             def = calledDef;
+            score = 1.15;
         }
-        else if (TryMatch(DefinitionIs, s, out term, out def) ||
-                 TryMatch(DefinitionVerb, s, out term, out def) ||
-                 TryMatch(DefinitionColon, s, out term, out def) ||
+        else if (TryMatch(DefinitionColon, s, out term, out def) ||
                  TryMatch(DefinitionDash, s, out term, out def))
         {
-            // values already assigned by the successful call
+            score = 1.3;
+        }
+        else if (TryMatch(DefinitionIs, s, out term, out def) ||
+                 TryMatch(DefinitionVerb, s, out term, out def))
+        {
+            score = 1.2;
         }
         else
         {
@@ -232,10 +513,10 @@ public static partial class CardFactory
         }
 
         term = TidyTerm(term);
-        def = TidyDefinition(def);
+        def = TidyDefinition(def, term);
         if (!IsUsableTerm(term) || !IsUsableDefinition(def, term)) return false;
 
-        var score = 1.0 + (def.Length is >= 40 and <= 160 ? 0.2 : 0);
+        if (def.Length is >= 40 and <= 160) score += 0.1;
         draft = new DraftCard(term, def, null, "definition", score, 0);
         return true;
     }
@@ -264,13 +545,33 @@ public static partial class CardFactory
         return true;
     }
 
-    private static bool TryCloze(string sentence, out DraftCard draft)
+    /// <summary>
+    /// Cloze only over a term the document already highlighted, or a capitalised phrase in
+    /// the middle of the sentence. Blanking an adverb makes a card nobody can answer.
+    /// </summary>
+    private static bool TryCloze(string sentence, HashSet<string> terms, out DraftCard draft)
     {
         draft = new DraftCard("", "", null, "cloze", 0, 0);
         var s = sentence.Trim();
         if (s.Length is < 60 or > 200) return false;
+        if (s.Contains('?')) return false;
+        if (s.EndsWith(':')) return false; // a line that introduces code, not a statement
+        if (s.Count(c => c == ':') > 1) return false; // a data dump, not a sentence
+        if (s.Contains("Press any key", StringComparison.OrdinalIgnoreCase)) return false;
+        if (CodeShaped().IsMatch(s)) return false;
 
-        var span = PickClozeSpan(s);
+        // A sentence about the sample on the page is not a fact about the subject.
+        var lower = s.ToLowerInvariant();
+        foreach (var lead in ExampleLeadIns)
+            if (lower.Contains(lead, StringComparison.Ordinal))
+                return false;
+
+        // A formula, a table row, or a bulleted list that lost its bullet.
+        if (s.Contains('=')) return false;
+        if (MathGlyph().IsMatch(s)) return false;
+        if (AdverbRun().IsMatch(s)) return false;
+
+        var span = PickClozeSpan(s, terms);
         if (span is null) return false;
 
         var (index, length) = span.Value;
@@ -278,46 +579,112 @@ public static partial class CardFactory
         var answer = s.Substring(index, length).Trim();
         if (answer.Length < 3) return false;
 
+        // "____ and variables that are not intended to be used outside of the class
+        // can be hidden." The blank swallowed half a compound subject, so the sentence
+        // no longer reads as a statement.
+        if (index == 0)
+        {
+            var after = blanked[4..];
+            if (after.StartsWith(" and ", StringComparison.OrdinalIgnoreCase) ||
+                after.StartsWith(" or ", StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        if (!IsUsableClozeAnswer(answer)) return false;
+
         draft = new DraftCard(blanked, answer, null, "cloze", 0.5, 0);
         return true;
     }
 
-    [GeneratedRegex(@"\b[A-Z][a-z]{2,}(?:\s+(?:[A-Z][a-z]{2,}|[a-z]{4,}))?\b")]
+    /// <summary>An answer has to stand alone as the thing being asked for.</summary>
+    private static bool IsUsableClozeAnswer(string answer)
+    {
+        var lower = answer.ToLowerInvariant();
+        if (EmptyAnswers.Contains(answer)) return false;
+        if (lower is "the following" or "following") return false;
+
+        foreach (var determiner in Determiners)
+            if (lower.StartsWith(determiner, StringComparison.Ordinal))
+                return false;
+
+        var words = answer.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length > 4) return false;
+        if (words.All(StopWords.Contains)) return false;
+
+        // "Constructors with", "Namespaces help" - the blank swallowed the next word.
+        var last = words[^1].ToLowerInvariant();
+        if (TrailingWords.Contains(last)) return false;
+
+        // "Defining", "Returning", "Invoked" - a verb form is a fragment, not an answer.
+        if (words.Length == 1 && (last.EndsWith("ing", StringComparison.Ordinal) ||
+                                  last.EndsWith("ed", StringComparison.Ordinal)))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// A run of capitalised words. It stops at the first lowercase word, because
+    /// "Lysosomes contain hydrolytic" is a subject plus its verb, not a term.
+    /// </summary>
+    [GeneratedRegex(@"\b[A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})*\b")]
     private static partial Regex CapitalPhrase();
 
-    [GeneratedRegex(@"[A-Za-z][A-Za-z\-']{4,}")]
-    private static partial Regex WordRun();
+    /// <summary>
+    /// Mathematical alphanumerics and arrows, which only appear in formulas. .NET regex
+    /// escapes are four hex digits, so the astral block is written as its surrogate pair.
+    /// </summary>
+    [GeneratedRegex(@"[\u2190-\u21FF\u2200-\u22FF\uD835[\uDC00-\uDFFF]]")]
+    private static partial Regex MathGlyph();
 
-    private static (int Index, int Length)? PickClozeSpan(string sentence)
+    /// <summary>
+    /// "Thus, Therefore, Sample Problem 1:" is two list fragments glued together by the
+    /// line rejoin, not a sentence.
+    /// </summary>
+    [GeneratedRegex(@"^[A-Z][a-z]+,\s+[A-Z][a-z]+,")]
+    private static partial Regex AdverbRun();
+
+    private static (int Index, int Length)? PickClozeSpan(string sentence, HashSet<string> terms)
     {
-        // A capitalised phrase mid-sentence is almost always the term worth blanking.
+        // Best case: a term the document set in bold or in a heading.
         var best = (Index: -1, Length: 0);
+        foreach (var term in terms)
+        {
+            if (term.Length is < 4 or > 40) continue;
+            var at = sentence.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+            if (at <= 0) continue;
+            if (term.Length > best.Length) best = (at, term.Length);
+        }
+        if (best.Index >= 0) return best;
+
+        // Otherwise a capitalised phrase, which in running prose is a name or a class.
         foreach (Match match in CapitalPhrase().Matches(sentence))
         {
-            if (match.Index == 0) continue;
-            if (StopWords.Contains(match.Value)) continue;
-            if (match.Length > best.Length) best = (match.Index, match.Length);
+            var index = match.Index;
+            var value = match.Value;
+
+            // "The Golgi apparatus" — blank the noun, not the article in front of it.
+            foreach (var determiner in Determiners)
+            {
+                if (!value.StartsWith(determiner, StringComparison.OrdinalIgnoreCase)) continue;
+                index += determiner.Length;
+                value = value[determiner.Length..];
+                break;
+            }
+
+            if (value.Length < 4) continue;
+            if (StopWords.Contains(value)) continue;
+            if (LeadInWords.Contains(value.Split(' ')[0])) continue;
+
+            // A sentence that opens on the term is still a fair blank, as long as the term
+            // is substantial. "The process..." is not, "Chloroplasts" is.
+            if (index == 0 && value.Length < 6) continue;
+
+            if (value.Length > best.Length) best = (index, value.Length);
         }
         if (best.Index >= 0 && best.Length >= 4) return best;
 
-        // Otherwise the longest content word, with a nudge towards the subject.
-        var index = -1;
-        var length = 0;
-        var score = 0.0;
-        foreach (Match match in WordRun().Matches(sentence))
-        {
-            if (StopWords.Contains(match.Value)) continue;
-            var candidate = match.Value.Length / 10.0;
-            if (char.IsUpper(match.Value[0])) candidate += match.Index == 0 ? 0.5 : 0.6;
-            if (candidate > score)
-            {
-                score = candidate;
-                index = match.Index;
-                length = match.Value.Length;
-            }
-        }
-
-        return index >= 0 && score >= 0.9 ? (index, length) : null;
+        return null;
     }
 
     private static string TidyTerm(string term)
@@ -334,21 +701,56 @@ public static partial class CardFactory
         return t.Trim();
     }
 
-    private static string TidyDefinition(string def)
+    private static string TidyDefinition(string def, string term = "")
     {
-        var d = def.Trim().Trim('-', '—', '–', ':', ' ');
+        var d = def.Trim().Trim('-', '\u2014', '\u2013', ':', ' ');
+
+        // "Encapsulation \u2014 Encapsulation is the process of..." reads as a stutter.
+        if (term.Length > 0)
+        {
+            foreach (var copula in new[] { " is ", " are ", " refers to ", " means " })
+            {
+                var prefix = term + copula;
+                if (d.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    d = d[prefix.Length..];
+                    break;
+                }
+            }
+        }
+
+        if (d.Length > MaxBack)
+        {
+            // Cut on a sentence boundary when there is one, so a long definition reads as
+            // whole sentences instead of stopping mid-word.
+            var window = d[..MaxBack];
+            var stop = window.LastIndexOfAny(new[] { '.', '!', '?' });
+            d = stop > 60 ? window[..(stop + 1)] : window.TrimEnd() + "\u2026";
+        }
+
         if (d.Length > 0) d = char.ToUpperInvariant(d[0]) + d[1..];
-        if (d.Length > 0 && !".!?".Contains(d[^1])) d += ".";
+        if (d.Length > 0 && !".!?\u2026".Contains(d[^1])) d += ".";
         return d;
     }
 
     private static bool IsUsableTerm(string term)
     {
         if (term.Length is < 3 or > MaxFront) return false;
-        if (term.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 10) return false;
+
+        var words = term.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length is 0 or > MaxTermWords) return false;
+        if (LeadInWords.Contains(words[0])) return false;
         if (term.Any(char.IsDigit)) return false;
         if (!char.IsLetter(term[0])) return false;
         if (term.Contains("http", StringComparison.OrdinalIgnoreCase)) return false;
+        if (term.Contains('?') || term.Contains('!')) return false;
+
+        // A clause is not a term. "Methods and variables that" is prose wearing a heading.
+        var padded = " " + term.ToLowerInvariant() + " ";
+        foreach (var marker in ClauseMarkers)
+            if (padded.Contains(marker, StringComparison.Ordinal))
+                return false;
+
         if (term.StartsWith("Figure", StringComparison.OrdinalIgnoreCase)) return false;
         if (term.StartsWith("Table", StringComparison.OrdinalIgnoreCase)) return false;
         return true;
@@ -356,10 +758,17 @@ public static partial class CardFactory
 
     private static bool IsUsableDefinition(string def, string term)
     {
-        if (def.Length is < 15 or > MaxBack) return false;
+        if (def.Length is < 15 or > MaxBack + 1) return false;
         if (!def.Contains(' ')) return false;
         if (string.Equals(def.TrimEnd('.'), term, StringComparison.OrdinalIgnoreCase)) return false;
         if (def.Contains("http", StringComparison.OrdinalIgnoreCase)) return false;
+        if (def.Contains('?')) return false;
+
+        var lower = def.ToLowerInvariant();
+        foreach (var lead in DefLeadIns)
+            if (lower.StartsWith(lead, StringComparison.Ordinal))
+                return false;
+
         return true;
     }
 }

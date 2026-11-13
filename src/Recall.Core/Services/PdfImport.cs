@@ -1,6 +1,4 @@
 using System.IO;
-using UglyToad.PdfPig;
-using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace Recall.Services;
 
@@ -8,42 +6,40 @@ public sealed record PdfExtraction(string FileName, int Pages, List<DraftCard> C
 
 public static class PdfImport
 {
-    /// Extracts text per page, runs the card factory over each page, then keeps the
-    /// highest scoring drafts across the whole document.
+    /// <summary>
+    /// Reads the document as lines with their typography, cleans it once for the whole file
+    /// so running headers and footers can be recognised, then extracts cards page by page.
+    /// </summary>
     public static PdfExtraction FromFile(string path, int maxCards, IProgress<string>? progress = null)
     {
         var name = Path.GetFileNameWithoutExtension(path);
         try
         {
-            using var document = PdfDocument.Open(path);
-            var pages = new List<(int Number, string Text)>();
+            var raw = PdfLayout.ReadLines(path, progress);
+            var pages = raw.Select(l => l.Page).Distinct().Count();
 
-            foreach (var page in document.GetPages())
-            {
-                progress?.Report($"Reading page {page.Number}…");
-                string text;
-                try
-                {
-                    text = ContentOrderTextExtractor.GetText(page);
-                }
-                catch (Exception)
-                {
-                    text = page.Text; // layout analysis can fail on unusual content streams
-                }
-                pages.Add((page.Number, text ?? ""));
-            }
+            if (raw.Count == 0 || raw.Sum(l => l.Text.Length) < 80)
+                return new PdfExtraction(name, pages, new List<DraftCard>(),
+                    "No selectable text found. Scanned PDFs need OCR first.");
 
             progress?.Report("Extracting cards…");
 
-            var readable = pages.Where(p => p.Text.Trim().Length > 80).ToList();
+            var prepared = CardFactory.PrepareDocument(raw);
+            var readable = prepared
+                .GroupBy(l => l.Page)
+                .Where(g => g.Sum(l => l.Text.Length) > 80)
+                .OrderBy(g => g.Key)
+                .ToList();
+
             if (readable.Count == 0)
-                return new PdfExtraction(name, pages.Count, new List<DraftCard>(), "No selectable text found. Scanned PDFs need OCR first.");
+                return new PdfExtraction(name, pages, new List<DraftCard>(),
+                    "The pages are mostly headings and captions, so there was nothing to make cards from.");
 
             var perPage = Math.Max(2, (int)Math.Ceiling(maxCards / (double)readable.Count) * 2);
             var drafts = new List<DraftCard>();
 
-            foreach (var (number, text) in readable)
-                drafts.AddRange(CardFactory.FromText(text, perPage, $"p. {number}"));
+            foreach (var page in readable)
+                drafts.AddRange(CardFactory.FromLines(page.ToList(), perPage, $"p. {page.Key}"));
 
             var ranked = drafts
                 .OrderByDescending(d => d.Score)
@@ -52,7 +48,7 @@ public static class PdfImport
                 .Take(maxCards)
                 .ToList();
 
-            return new PdfExtraction(name, pages.Count, ranked, null);
+            return new PdfExtraction(name, pages, ranked, null);
         }
         catch (Exception ex)
         {

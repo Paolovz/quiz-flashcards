@@ -14,6 +14,20 @@ public sealed class DayCell
     public string Label => $"{Date:ddd d MMM} · {Count} review{(Count == 1 ? "" : "s")}";
 }
 
+/// <summary>One bar in the seven-day review forecast.</summary>
+public sealed class ForecastBar
+{
+    public DateTime Date { get; init; }
+    public int Count { get; init; }
+    public double Height { get; init; }
+    public bool IsToday { get; init; }
+
+    public string DayLabel => IsToday ? "Today" : Date.ToString("ddd");
+    public string CountLabel => Count == 0 ? "—" : Count.ToString();
+    public string Tooltip => $"{Date:ddd d MMM} · {Count} card{(Count == 1 ? "" : "s")} due";
+    public string Tag => IsToday ? "today" : "";
+}
+
 public sealed class LibraryViewModel : Observable
 {
     private readonly INavigator _nav;
@@ -26,6 +40,10 @@ public sealed class LibraryViewModel : Observable
     private string _status = "";
     private bool _nameMissing;
     private bool _subjectMissing;
+
+    /// <summary>Vertical scroll of the page, kept so returning from Settings lands where
+    /// the reader left off rather than at the top.</summary>
+    public double ScrollOffset { get; set; }
 
     public LibraryViewModel(INavigator nav)
     {
@@ -42,12 +60,14 @@ public sealed class LibraryViewModel : Observable
         OpenCommand = new RelayCommand(p => { if (p is Deck deck) _nav.ToDeck(deck); });
         DeleteCommand = new RelayCommand(p => Delete(p as Deck));
         ImportCommand = new RelayCommand(_nav.ToImport);
+        ImportCsvCommand = new RelayCommand(ImportCsv);
         StudyAllCommand = new RelayCommand(StudyAll);
         Refresh();
     }
 
     public ObservableCollection<Deck> Decks { get; } = new();
     public ObservableCollection<DayCell> Activity { get; } = new();
+    public ObservableCollection<ForecastBar> Forecast { get; } = new();
 
     public RelayCommand CreateDeckCommand { get; }
     public RelayCommand NewDeckCommand { get; }
@@ -55,6 +75,7 @@ public sealed class LibraryViewModel : Observable
     public RelayCommand OpenCommand { get; }
     public RelayCommand DeleteCommand { get; }
     public RelayCommand ImportCommand { get; }
+    public RelayCommand ImportCsvCommand { get; }
     public RelayCommand StudyAllCommand { get; }
 
     public string Greeting => DateTime.Now.Hour switch
@@ -186,6 +207,7 @@ public sealed class LibraryViewModel : Observable
             Decks.Add(deck);
 
         BuildActivity();
+        BuildForecast();
 
         Raise(nameof(Subtitle));
         Raise(nameof(DueToday));
@@ -220,8 +242,85 @@ public sealed class LibraryViewModel : Observable
         }
     }
 
-    private void StartCreate()
+    /// <summary>
+    /// Seven-day review forecast. Bars are scaled against the busiest day so a light
+    /// week still reads as a shape instead of a flat line.
+    /// </summary>
+    private void BuildForecast()
     {
+        Forecast.Clear();
+
+        var days = _store.Forecast(7);
+        var peak = Math.Max(1, days.Max(d => d.Count));
+        var today = DateTime.Today;
+
+        foreach (var (day, count) in days)
+        {
+            Forecast.Add(new ForecastBar
+            {
+                Date = day,
+                Count = count,
+                IsToday = day == today,
+                Height = 6 + 54.0 * count / peak
+            });
+        }
+
+        Raise(nameof(ForecastTotal));
+    }
+
+    /// <summary>Total cards landing in the next seven days, new cards included.</summary>
+    public string ForecastTotal
+    {
+        get
+        {
+            var total = Forecast.Sum(f => f.Count);
+            return total == 0 ? "Nothing scheduled" : $"{total} card{(total == 1 ? "" : "s")}";
+        }
+    }
+
+    private void ImportCsv()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Delimited text (*.csv;*.tsv;*.txt)|*.csv;*.tsv;*.txt|All files (*.*)|*.*",
+            CheckFileExists = true,
+            Title = "Import cards from a CSV, TSV or Quizlet export"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        var result = CsvDeck.Import(dialog.FileName);
+        if (result.Error is not null)
+        {
+            Status = result.Error;
+            return;
+        }
+
+        if (result.Cards.Count == 0)
+        {
+            Status = "No rows with a front and a back were found.";
+            return;
+        }
+
+        var deck = new Deck
+        {
+            Name = System.IO.Path.GetFileNameWithoutExtension(dialog.FileName),
+            Subject = "Imported",
+            Cards = result.Cards
+        };
+
+        _store.Data.Decks.Add(deck);
+        _store.Save();
+        Refresh();
+
+        Status = result.Skipped == 0
+            ? $"{result.Cards.Count} cards imported into \u201C{deck.Name}\u201D."
+            : $"{result.Cards.Count} cards imported, {result.Skipped} empty rows skipped.";
+
+        _nav.ToDeck(deck);
+    }
+
+    private void StartCreate()    {
         NewName = "";
         NewSubject = "";
         ClearCreateError();

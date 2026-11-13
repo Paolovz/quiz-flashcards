@@ -63,9 +63,12 @@ public sealed class Store
     public void LogReview(int count = 1)
     {
         var k = Key(DateTime.Today);
-        Data.ReviewsByDay[k] = Data.ReviewsByDay.GetValueOrDefault(k) + count;
+        Data.ReviewsByDay[k] = Math.Max(0, Data.ReviewsByDay.GetValueOrDefault(k) + count);
         Save();
     }
+
+    /// <summary>Undo path: the review that was just logged did not happen.</summary>
+    public void UnlogReview() => LogReview(-1);
 
     public int ReviewsToday => Data.ReviewsByDay.GetValueOrDefault(Key(DateTime.Today));
 
@@ -85,7 +88,33 @@ public sealed class Store
     public int DueTotal => Data.Decks.Sum(d => d.DueCount);
 
     public IEnumerable<Card> AllDue()
-        => Data.Decks.SelectMany(d => d.Cards).Where(c => c.IsDue(DateTime.Now));
+        => Data.Decks.SelectMany(d => d.Cards).Where(c => !c.Suspended && c.IsDue(DateTime.Now));
 
     public IEnumerable<Card> AllCards() => Data.Decks.SelectMany(d => d.Cards);
+
+    /// <summary>
+    /// How many cards fall due on each of the next <paramref name="days"/> days.
+    /// Everything already overdue is counted on day zero, the way a review forecast reads.
+    /// </summary>
+    public IReadOnlyList<(DateTime Day, int Count)> Forecast(int days)
+    {
+        var today = DateTime.Today;
+        var buckets = new int[days];
+
+        foreach (var card in AllCards().Where(c => !c.Suspended))
+        {
+            var due = card.Due?.Date ?? today;
+            var offset = (due - today).Days;
+
+            // A card past the horizon is not part of this forecast.
+            if (offset >= days) continue;
+
+            // New cards and overdue cards are today's work, not a hole in the chart.
+            buckets[Math.Max(0, offset)]++;
+        }
+
+        return Enumerable.Range(0, days)
+            .Select(i => (today.AddDays(i), buckets[i]))
+            .ToList();
+    }
 }

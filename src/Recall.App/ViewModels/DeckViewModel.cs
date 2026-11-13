@@ -37,6 +37,9 @@ public sealed class DeckViewModel : Observable
     private bool _answerIsTrue = true;
     private string _search = "";
     private string _status = "";
+    private string _tags = "";
+    private bool _starred;
+    private bool _suspended;
 
     public DeckViewModel(INavigator nav, Deck deck)
     {
@@ -47,12 +50,16 @@ public sealed class DeckViewModel : Observable
         StudyCommand = new RelayCommand(() => Start(quiz: false, all: false));
         QuizCommand = new RelayCommand(() => Start(quiz: true, all: false));
         CramCommand = new RelayCommand(() => Start(quiz: false, all: true));
+        StudyStarredCommand = new RelayCommand(StudyStarred, () => _deck.StarredCount > 0);
         AddCommand = new RelayCommand(NewCard);
         SaveCommand = new RelayCommand(Save);
         DeleteCardCommand = new RelayCommand(DeleteCard);
         ExportCommand = new RelayCommand(Export);
+        ImportCsvCommand = new RelayCommand(ImportCsv);
         ImportPdfCommand = new RelayCommand(_nav.ToImport);
         BrowseImageCommand = new RelayCommand(BrowseImage);
+        ToggleStarCommand = new RelayCommand(ToggleStar);
+        ToggleSuspendCommand = new RelayCommand(ToggleSuspend);
 
         Refresh();
     }
@@ -76,12 +83,16 @@ public sealed class DeckViewModel : Observable
     public RelayCommand StudyCommand { get; }
     public RelayCommand QuizCommand { get; }
     public RelayCommand CramCommand { get; }
+    public RelayCommand StudyStarredCommand { get; }
     public RelayCommand AddCommand { get; }
     public RelayCommand SaveCommand { get; }
     public RelayCommand DeleteCardCommand { get; }
     public RelayCommand ExportCommand { get; }
+    public RelayCommand ImportCsvCommand { get; }
     public RelayCommand ImportPdfCommand { get; }
     public RelayCommand BrowseImageCommand { get; }
+    public RelayCommand ToggleStarCommand { get; }
+    public RelayCommand ToggleSuspendCommand { get; }
 
     public string Name
     {
@@ -202,6 +213,41 @@ public sealed class DeckViewModel : Observable
         set => Set(ref _imagePath, value);
     }
 
+    public string Tags
+    {
+        get => _tags;
+        set => Set(ref _tags, value);
+    }
+
+    public bool IsStarred
+    {
+        get => _starred;
+        set
+        {
+            if (!Set(ref _starred, value)) return;
+            Raise(nameof(StarLabel));
+            Raise(nameof(StarTag));
+        }
+    }
+
+    public bool IsSuspended
+    {
+        get => _suspended;
+        set
+        {
+            if (!Set(ref _suspended, value)) return;
+            Raise(nameof(SuspendLabel));
+            Raise(nameof(SuspendTag));
+        }
+    }
+
+    public string StarLabel => IsStarred ? "Starred" : "Star";
+    public string StarTag => IsStarred ? "on" : "";
+    public string SuspendLabel => IsSuspended ? "Suspended" : "Suspend";
+    public string SuspendTag => IsSuspended ? "on" : "";
+    public bool HasStarred => _deck.StarredCount > 0;
+    public string StarredLabel => _deck.StarredCount == 0 ? "Study starred" : $"Study starred ({_deck.StarredCount})";
+
     public bool AnswerIsTrue
     {
         get => _answerIsTrue;
@@ -288,6 +334,9 @@ public sealed class DeckViewModel : Observable
         Raise(nameof(HasCards));
         Raise(nameof(IsEmpty));
         Raise(nameof(CanQuiz));
+        Raise(nameof(HasStarred));
+        Raise(nameof(StarredLabel));
+        StudyStarredCommand.RaiseCanExecuteChanged();
         RefreshCards();
     }
 
@@ -313,7 +362,8 @@ public sealed class DeckViewModel : Observable
             ? _deck.Cards
             : _deck.Cards.Where(c =>
                 c.Front.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                c.Back.Contains(query, StringComparison.OrdinalIgnoreCase));
+                c.Back.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (c.Tags ?? "").Contains(query, StringComparison.OrdinalIgnoreCase));
 
         foreach (var card in source.OrderBy(c => c.Front))
             Cards.Add(card);
@@ -332,6 +382,9 @@ public sealed class DeckViewModel : Observable
         PairsText = CardFormat.FormatPairs(card.Pairs);
         ImagePath = card.ImagePath ?? "";
         AnswerIsTrue = !card.Answer.Trim().Equals("False", StringComparison.OrdinalIgnoreCase);
+        Tags = card.Tags ?? "";
+        IsStarred = card.Starred;
+        IsSuspended = card.Suspended;
     }
 
     private void NewCard()
@@ -346,6 +399,9 @@ public sealed class DeckViewModel : Observable
         PairsText = "";
         ImagePath = "";
         AnswerIsTrue = true;
+        Tags = "";
+        IsStarred = false;
+        IsSuspended = false;
         Status = "";
         Raise(nameof(EditorTitle));
         Raise(nameof(IsEditing));
@@ -473,6 +529,10 @@ public sealed class DeckViewModel : Observable
 
         if (Selected is null) _deck.Cards.Add(card);
 
+        card.Tags = Tags.Trim().Length == 0 ? null : Tags.Trim();
+        card.Starred = IsStarred;
+        card.Suspended = IsSuspended;
+
         _store.Save();
         Refresh();
         Selected = card;
@@ -527,21 +587,84 @@ public sealed class DeckViewModel : Observable
     {
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            FileName = $"{SafeName(_deck.Name)}.txt",
-            Filter = "Text file (*.txt)|*.txt",
-            DefaultExt = ".txt"
+            FileName = $"{CsvDeck.SafeFileName(_deck.Name)}.csv",
+            Filter = "CSV for Anki, Quizlet or Excel (*.csv)|*.csv|All files (*.*)|*.*",
+            DefaultExt = ".csv",
+            Title = "Export this deck as CSV"
         };
 
         if (dialog.ShowDialog() != true) return;
 
-        var lines = _deck.Cards.Select(c => $"{c.Kind}\t{c.Front} | {c.Back}");
-        File.WriteAllLines(dialog.FileName, lines);
-        Status = $"Exported {_deck.Cards.Count} cards.";
+        CsvDeck.Export(_deck.Cards, dialog.FileName);
+        Status = $"Exported {_deck.Cards.Count} cards to {System.IO.Path.GetFileName(dialog.FileName)}.";
     }
 
-    private static string SafeName(string name)
+    /// <summary>
+    /// Adds the rows of a CSV into the deck that is open, so a spreadsheet can top up an
+    /// existing deck instead of always starting a new one.
+    /// </summary>
+    private void ImportCsv()
     {
-        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '-');
-        return name.Trim();
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Delimited text (*.csv;*.tsv;*.txt)|*.csv;*.tsv;*.txt|All files (*.*)|*.*",
+            CheckFileExists = true,
+            Title = "Add cards from a CSV or TSV"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        var result = CsvDeck.Import(dialog.FileName);
+        if (result.Error is not null)
+        {
+            Status = result.Error;
+            return;
+        }
+
+        if (result.Cards.Count == 0)
+        {
+            Status = "No rows with a front and a back were found.";
+            return;
+        }
+
+        foreach (var card in result.Cards) _deck.Cards.Add(card);
+
+        _store.Save();
+        Refresh();
+
+        Status = result.Skipped == 0
+            ? $"Added {result.Cards.Count} cards from {System.IO.Path.GetFileName(dialog.FileName)}."
+            : $"Added {result.Cards.Count} cards, skipped {result.Skipped} empty rows.";
+    }
+
+    private void ToggleStar()
+    {
+        if (Selected is null) return;
+        IsStarred = !IsStarred;
+        Selected.Starred = IsStarred;
+        _store.Save();
+        Raise(nameof(HasStarred));
+        Raise(nameof(StarredLabel));
+        StudyStarredCommand.RaiseCanExecuteChanged();
+    }
+
+    private void ToggleSuspend()
+    {
+        if (Selected is null) return;
+        IsSuspended = !IsSuspended;
+        Selected.Suspended = IsSuspended;
+        _store.Save();
+        Refresh();
+        Status = IsSuspended
+            ? "Suspended. It stays out of sessions until you unsuspend it."
+            : "Back in rotation.";
+    }
+
+    private void StudyStarred()
+    {
+        var starred = _deck.Cards.Where(c => c.Starred && !c.Suspended).ToList();
+        if (starred.Count == 0) return;
+
+        _nav.ToStudy(_deck, Session.Build(starred, 50), quiz: false);
     }
 }

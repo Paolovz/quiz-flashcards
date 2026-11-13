@@ -45,10 +45,22 @@
                 </Border>
             </StackPanel>
 
-            <Button Style="{StaticResource BtnGhost}" Content="End session" HorizontalAlignment="Right"
-                    Command="{Binding ExitCommand}" AutomationProperties.Name="End this study session" />
-        </Grid>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <Border Style="{StaticResource Chip}" Margin="0,0,10,0"
+                        Background="{DynamicResource B.WarnSoft}"
+                        Visibility="{Binding HasNotice, Converter={StaticResource BoolVis}}">
+                    <TextBlock Text="{Binding Notice}" Style="{StaticResource T.Small}"
+                               Foreground="{DynamicResource B.Warn}" MaxWidth="360" TextWrapping="Wrap" />
+                </Border>
 
+                <Button Style="{StaticResource BtnGhost}" Content="Undo" Margin="0,0,10,0"
+                        Command="{Binding UndoCommand}" ToolTip="Ctrl+Z — take back the last grade"
+                        AutomationProperties.Name="Undo the last grade" />
+
+                <Button Style="{StaticResource BtnGhost}" Content="End session"
+                        Command="{Binding ExitCommand}" AutomationProperties.Name="End this study session" />
+            </StackPanel>
+        </Grid>
         <ProgressBar Grid.Row="1" Style="{StaticResource Bar}" Maximum="100" Value="{Binding Progress, Mode=OneWay}"
                      Margin="0,0,0,0" Height="6" />
 
@@ -142,7 +154,7 @@
                         </Button>
                     </Grid>
 
-                    <TextBlock Text="1 Again Â· 2 Hard Â· 3 Good Â· 4 Easy" Style="{StaticResource T.Label}"
+                    <TextBlock Text="1 Again · 2 Hard · 3 Good · 4 Easy" Style="{StaticResource T.Label}"
                                HorizontalAlignment="Center" Margin="0,12,0,0" />
                 </StackPanel>
             </Grid>

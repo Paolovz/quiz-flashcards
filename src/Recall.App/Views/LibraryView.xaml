@@ -8,6 +8,23 @@
              mc:Ignorable="d">
 
     <UserControl.Resources>
+        <!-- Forecast bar: scaled against the busiest day so a light week still reads as a shape. -->
+        <Style x:Key="ForecastBar" TargetType="Border">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="CornerRadius" Value="5,5,2,2" />
+            <Setter Property="Background" Value="{DynamicResource B.PrimarySoft}" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Count}" Value="0">
+                    <Setter Property="Background" Value="{DynamicResource B.SurfaceAlt}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag}" Value="today">
+                    <Setter Property="Background" Value="{DynamicResource B.Primary}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Deck tile: lifts under the cursor without shifting the wrap panel. -->
         <Style x:Key="DeckCard" TargetType="Border" BasedOn="{StaticResource Clay}">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
@@ -75,7 +92,7 @@
         </Style>
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+    <ScrollViewer x:Name="Page" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
         <StackPanel Margin="0,0,0,28">
 
             <!-- Hero -->
@@ -168,6 +185,39 @@
                 </Grid>
             </Border>
 
+            <!-- Seven-day forecast: the work coming, so a heavy Wednesday is not a surprise. -->
+            <Border Style="{StaticResource ClayFlat}" Margin="0,18,0,0" Padding="22,18">
+                <StackPanel>
+                    <Grid>
+                        <TextBlock Text="NEXT 7 DAYS" Style="{StaticResource T.Label}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding ForecastTotal}" Style="{StaticResource T.Small}"
+                                   Foreground="{DynamicResource B.TextMuted}"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Forecast}" Margin="0,14,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="7" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,6,0" ToolTip="{Binding Tooltip}">
+                                    <TextBlock Text="{Binding CountLabel}" Style="{StaticResource T.Label}"
+                                               HorizontalAlignment="Center" Margin="0,0,0,6" />
+                                    <Border Height="58" Background="Transparent">
+                                        <Border Style="{StaticResource ForecastBar}" Height="{Binding Height}" />
+                                    </Border>
+                                    <TextBlock Text="{Binding DayLabel}" Style="{StaticResource T.Label}"
+                                               HorizontalAlignment="Center" Margin="0,8,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
             <!-- Decks header -->
             <Grid Margin="0,26,0,12">
                 <TextBlock Text="Your decks" Style="{StaticResource T.H1}" VerticalAlignment="Center" />
@@ -180,6 +230,11 @@
                                    Foreground="{DynamicResource B.AccentDeep}"
                                    AutomationProperties.LiveSetting="Polite" />
                     </Border>
+                    <Button Style="{StaticResource Btn}" Command="{Binding ImportCsvCommand}" Margin="0,0,8,0"
+                            ToolTip="Bring in a CSV or TSV from Anki, Quizlet, Brainscape or a spreadsheet"
+                            AutomationProperties.Name="Import cards from a CSV or TSV file">
+                        Import CSV
+                    </Button>
                     <Button Style="{StaticResource Btn}" Command="{Binding ImportCommand}" Margin="0,0,8,0">
                         Import PDF
                     </Button>

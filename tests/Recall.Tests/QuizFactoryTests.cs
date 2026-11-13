@@ -60,6 +60,38 @@ public class QuizFactoryTests
     }
 
     [Fact]
+    public void A_distractor_is_never_the_answer_spelled_another_way()
+    {
+        var pool = new[]
+        {
+            "Mitochondria",
+            "Mitochondrion",
+            "mitochondria",
+            "Mitochondria, the site of aerobic respiration",
+            "Ribosomes",
+            "Lysosomes",
+            "Golgi apparatus"
+        };
+
+        var picked = QuizFactory.PickDistractors("Mitochondria", pool);
+
+        Assert.DoesNotContain(picked, p => p.Contains("itochondri", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Ribosomes", picked);
+        Assert.Contains("Lysosomes", picked);
+    }
+
+    [Fact]
+    public void A_distractor_is_never_a_boolean()
+    {
+        var pool = new[] { "True", "False", "Yes", "No", "Inheritance", "Polymorphism", "Encapsulation is not this" };
+
+        var picked = QuizFactory.PickDistractors("Encapsulation", pool);
+
+        Assert.DoesNotContain(picked, p => p is "True" or "False" or "Yes" or "No");
+        Assert.NotEmpty(picked);
+    }
+
+    [Fact]
     public void A_two_card_deck_still_produces_usable_questions()
     {
         var deck = DeckWith(

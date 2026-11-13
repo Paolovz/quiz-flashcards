@@ -82,7 +82,8 @@
             <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
                 <Button Style="{StaticResource BtnGhost}" Command="{Binding BackCommand}"
                         Content="&#x2039; Back" Padding="10,6"
-                        AutomationProperties.Name="Back to deck library" />
+                        ToolTip="Return to the screen you came from"
+                        AutomationProperties.Name="Back" />
             </StackPanel>
 
             <TextBlock Text="Settings" Style="{StaticResource T.Display}" />

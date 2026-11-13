@@ -442,6 +442,7 @@ public sealed class QuizViewModel : Observable
 
         Srs.Apply(Current.Card, correct ? Services.Grade.Good : Services.Grade.Again, DateTime.Now);
         Store.Instance.LogReview();
+        _nav.RefreshHeader();
 
         WasCorrect = correct;
         Answered = true;

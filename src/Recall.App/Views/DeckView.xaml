@@ -50,6 +50,27 @@
         <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource T.Label}">
             <Setter Property="Margin" Value="2,14,0,6" />
         </Style>
+
+        <!-- Star / suspend toggles: fill in when the flag is on, so the state reads at a glance. -->
+        <Style x:Key="StarBtn" TargetType="Button" BasedOn="{StaticResource Btn}">
+            <Setter Property="Foreground" Value="{DynamicResource B.TextMuted}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStarred}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource B.AccentSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource B.AccentDeep}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SuspendBtn" TargetType="Button" BasedOn="{StaticResource Btn}">
+            <Setter Property="Foreground" Value="{DynamicResource B.TextMuted}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSuspended}" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource B.WarnSoft}" />
+                    <Setter Property="Foreground" Value="{DynamicResource B.Warn}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -84,10 +105,10 @@
 
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                         <TextBlock Text="{Binding CountLabel}" Style="{StaticResource T.Small}" />
-                        <TextBlock Text="Â·" Style="{StaticResource T.Small}" Margin="8,0" />
+                        <TextBlock Text="·" Style="{StaticResource T.Small}" Margin="8,0" />
                         <TextBlock Text="{Binding DueLabel}" Style="{StaticResource T.Small}"
                                    Foreground="{DynamicResource B.PrimaryDeep}" />
-                        <TextBlock Text="Â·" Style="{StaticResource T.Small}" Margin="8,0" />
+                        <TextBlock Text="·" Style="{StaticResource T.Small}" Margin="8,0" />
                         <TextBlock Text="{Binding MasteryText}" Style="{StaticResource T.Small}"
                                    Foreground="{DynamicResource B.AccentDeep}" />
                         <TextBlock Text="mastery" Style="{StaticResource T.Small}" Margin="4,0,0,0" />
@@ -107,11 +128,16 @@
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Style="{StaticResource BtnGhost}" Command="{Binding StudyStarredCommand}"
+                                Content="{Binding StarredLabel}" ToolTip="Study only the cards you starred" />
                         <Button Style="{StaticResource BtnGhost}" Command="{Binding ImportPdfCommand}"
-                                Content="Import PDF" />
+                                Content="Import PDF" Margin="4,0,0,0" />
+                        <Button Style="{StaticResource BtnGhost}" Command="{Binding ImportCsvCommand}"
+                                Content="Import CSV" Margin="4,0,0,0"
+                                ToolTip="Add rows from a CSV, TSV or Quizlet export" />
                         <Button Style="{StaticResource BtnGhost}" Command="{Binding ExportCommand}"
                                 Content="Export" Margin="4,0,0,0"
-                                ToolTip="Write the deck out as tab-separated text" />
+                                ToolTip="Write the deck out as CSV for Anki, Quizlet or Excel" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -173,10 +199,27 @@
                                                    TextTrimming="CharacterEllipsis" MaxHeight="22" Margin="0,4,0,0" />
                                     </StackPanel>
 
-                                    <Border Grid.Column="1" Style="{StaticResource Chip}" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding DueLabel}" Style="{StaticResource T.Label}"
-                                                   Foreground="{DynamicResource B.PrimaryDeep}" />
-                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="★" FontSize="13" HorizontalAlignment="Right" Margin="0,0,2,4"
+                                                   Foreground="{DynamicResource B.Accent}"
+                                                   ToolTip="Starred"
+                                                   Visibility="{Binding Starred, Converter={StaticResource BoolVis}}" />
+
+                                        <Border Style="{StaticResource Chip}">
+                                            <TextBlock Text="{Binding StatusLabel}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource T.Label}">
+                                                        <Setter Property="Foreground" Value="{DynamicResource B.PrimaryDeep}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Suspended}" Value="True">
+                                                                <Setter Property="Foreground" Value="{DynamicResource B.Warn}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </StackPanel>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -248,7 +291,7 @@
 
                         <!-- Multiple choice and multi-select share the options box -->
                         <StackPanel Visibility="{Binding ShowsChoices, Converter={StaticResource BoolVis}}">
-                            <TextBlock Text="OPTIONS Â· one per line, * marks the correct one(s)"
+                            <TextBlock Text="OPTIONS · one per line, * marks the correct one(s)"
                                        Style="{StaticResource FieldLabel}" />
                             <TextBox Style="{StaticResource InputMulti}" Text="{Binding ChoicesText, UpdateSourceTrigger=PropertyChanged}"
                                      Height="112" AutomationProperties.Name="Multiple choice options" />
@@ -256,14 +299,14 @@
 
                         <!-- Order -->
                         <StackPanel Visibility="{Binding IsOrder, Converter={StaticResource BoolVis}}">
-                            <TextBlock Text="ITEMS Â· one per line, top to bottom is correct" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="ITEMS · one per line, top to bottom is correct" Style="{StaticResource FieldLabel}" />
                             <TextBox Style="{StaticResource InputMulti}" Text="{Binding ItemsText, UpdateSourceTrigger=PropertyChanged}"
                                      Height="112" AutomationProperties.Name="Ordered items" />
                         </StackPanel>
 
                         <!-- Match -->
                         <StackPanel Visibility="{Binding IsMatch, Converter={StaticResource BoolVis}}">
-                            <TextBlock Text="PAIRS Â· one per line as left = right" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="PAIRS · one per line as left = right" Style="{StaticResource FieldLabel}" />
                             <TextBox Style="{StaticResource InputMulti}" Text="{Binding PairsText, UpdateSourceTrigger=PropertyChanged}"
                                      Height="112" AutomationProperties.Name="Matching pairs" />
                         </StackPanel>
@@ -278,9 +321,23 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <TextBlock Text="HINT Â· optional" Style="{StaticResource FieldLabel}" />
+                        <TextBlock Text="HINT · optional" Style="{StaticResource FieldLabel}" />
                         <TextBox Style="{StaticResource Input}" Text="{Binding Hint, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Card hint" />
+
+                        <TextBlock Text="TAGS · optional, space separated" Style="{StaticResource FieldLabel}" />
+                        <TextBox Style="{StaticResource Input}" Text="{Binding Tags, UpdateSourceTrigger=PropertyChanged}"
+                                 AutomationProperties.Name="Card tags" />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                            <Button Style="{StaticResource StarBtn}" Command="{Binding ToggleStarCommand}"
+                                    Content="{Binding StarLabel}" IsEnabled="{Binding IsEditing}"
+                                    ToolTip="Starred cards can be studied on their own" />
+                            <Button Style="{StaticResource SuspendBtn}" Command="{Binding ToggleSuspendCommand}"
+                                    Content="{Binding SuspendLabel}" Margin="8,0,0,0"
+                                    IsEnabled="{Binding IsEditing}"
+                                    ToolTip="Suspended cards stay out of every session" />
+                        </StackPanel>
 
                         <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                             <Button Style="{StaticResource BtnPrimary}" Command="{Binding SaveCommand}"

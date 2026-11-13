@@ -13,7 +13,11 @@ public enum Grade
 /// SM-2 variant. Sub-day intervals for lapses so a missed card comes back in the same session.
 public static class Srs
 {
-    public static void Apply(Card card, Grade grade, DateTime now)
+    /// <summary>
+    /// Applies a grade and returns true when the card has just been suspended for
+    /// repeated lapses, so the caller can say so on screen.
+    /// </summary>
+    public static bool Apply(Card card, Grade grade, DateTime now)
     {
         card.Attempts++;
         if (grade != Grade.Again) card.Correct++;
@@ -25,7 +29,15 @@ public static class Srs
             card.IntervalDays = 0;
             card.Ease = Math.Max(1.3, card.Ease - 0.2);
             card.Due = now.AddMinutes(10);
-            return;
+
+            // A card that keeps failing is a leech: stop asking it every session and let
+            // the reader rewrite it instead of drilling a broken card.
+            if (card.Lapses >= Card.SrsLeechThreshold && !card.Suspended)
+            {
+                card.Suspended = true;
+                return true;
+            }
+            return false;
         }
 
         card.Reps++;
@@ -53,6 +65,7 @@ public static class Srs
 
         card.IntervalDays = Math.Clamp(interval, 1, 365);
         card.Due = now.Date.AddDays(card.IntervalDays).AddHours(4);
+        return false;
     }
 
     /// Label for the grade button, computed against the card's current state.

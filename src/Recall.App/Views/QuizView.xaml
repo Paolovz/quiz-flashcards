@@ -10,7 +10,7 @@
 
     <UserControl.Resources>
         <!-- One row of a choice question. The whole row is the hit target, so a click
-             anywhere on the option counts â€” not just on the letter or the tick. -->
+             anywhere on the option counts — not just on the letter or the tick. -->
         <Style x:Key="Option" TargetType="Button" BasedOn="{StaticResource Btn}">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="VerticalContentAlignment" Value="Center" />

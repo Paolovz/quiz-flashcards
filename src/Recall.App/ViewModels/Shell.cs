@@ -13,6 +13,10 @@ public interface INavigator
     void ToSummary(SessionResult result);
     void ToImport();
     void ToSettings();
+    void BackFromSettings();
+
+    /// <summary>Re-reads the streak and due counters in the title bar.</summary>
+    void RefreshHeader();
 }
 
 public sealed class Shell : Observable, INavigator
@@ -20,6 +24,9 @@ public sealed class Shell : Observable, INavigator
     private readonly Store _store = Store.Instance;
     private object? _current;
     private Deck? _deck;
+
+    /// Whatever was on screen when Settings was opened, put back on the way out.
+    private object? _beforeSettings;
 
     public Shell() => ToLibrary();
 
@@ -75,11 +82,24 @@ public sealed class Shell : Observable, INavigator
 
     public void ToSettings()
     {
+        // Settings is a detour, not a destination: keep the screen that was open so
+        // leaving Settings puts the user back where they were, session and all.
+        if (Current is not SettingsViewModel) _beforeSettings = Current;
+
         Current = new SettingsViewModel(this);
         RefreshHeader();
     }
 
-    private void RefreshHeader()
+    public void BackFromSettings()
+    {
+        var previous = _beforeSettings;
+        _beforeSettings = null;
+
+        Current = previous ?? new LibraryViewModel(this);
+        RefreshHeader();
+    }
+
+    public void RefreshHeader()
     {
         Raise(nameof(StreakText));
         Raise(nameof(DueText));

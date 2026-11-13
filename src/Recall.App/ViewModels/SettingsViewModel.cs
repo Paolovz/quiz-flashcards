@@ -65,7 +65,7 @@ public sealed class SettingsViewModel : Observable
 
         SelectThemeCommand = new RelayCommand(p => SelectTheme(p as ThemeRow));
         CopyPathCommand = new RelayCommand(CopyPath);
-        BackCommand = new RelayCommand(_nav.ToLibrary);
+        BackCommand = new RelayCommand(_nav.BackFromSettings);
     }
 
     public ObservableCollection<ThemeRow> Themes { get; }
