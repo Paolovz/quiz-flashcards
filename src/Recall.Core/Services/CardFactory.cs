@@ -55,6 +55,18 @@ public static partial class CardFactory
         "Prof.", "St.", "approx.", "cf.", "Eq.", "Sec.", "Ch.", "pp.", "p."
     };
 
+    /// <summary>
+    /// Placeholder nouns that name a slot in a code sample rather than a concept. "The name
+    /// is a defined name for namespace" is a sentence about the sample, not about the subject.
+    /// </summary>
+    private static readonly HashSet<string> GenericTerms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "name", "names", "value", "values", "type", "types", "data", "code", "number", "numbers",
+        "item", "items", "line", "lines", "text", "string", "strings", "result", "results",
+        "example", "examples", "output", "input", "size", "length", "keyword", "keywords",
+        "statement", "statements", "program", "syntax", "form", "content", "part", "parts"
+    };
+
     /// <summary>Words that open a clause, never a term. A front starting with one is prose.</summary>
     private static readonly HashSet<string> LeadInWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -66,7 +78,8 @@ public static partial class CardFactory
         "suppose", "assume", "let", "we", "you", "they", "it", "this", "these", "those", "there",
         "here", "in", "on", "at", "for", "from", "with", "by", "to", "of", "as", "if", "so", "but",
         "and", "or", "because", "while", "after", "before", "during", "through", "within", "between",
-        "using", "define", "defining", "use", "lets", "try", "see", "shown", "showing"
+        "using", "define", "defining", "use", "lets", "try", "see", "shown", "showing",
+        "sample", "problem", "problems", "practice", "exercise", "exercises"
     };
 
     /// <summary>Words that mark a fragment rather than a term: if the front contains one, it is a clause.</summary>
@@ -92,7 +105,8 @@ public static partial class CardFactory
     {
         "the following", "following example", "given example", "example below", "below shows",
         "as shown", "the statement", "is declared", "are declared", "in this example",
-        "the example", "the sample", "sample program", "the output", "the program below"
+        "the example", "the sample", "sample program", "the output", "the program below",
+        "sample problem", "practice problem", "problem set"
     };
 
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
@@ -128,6 +142,17 @@ public static partial class CardFactory
         "is", "are", "was", "were", "be", "been", "can", "will", "would", "should", "may", "might",
         "must", "has", "have", "had", "help", "helps", "used", "use", "show", "shows", "make",
         "makes", "give", "gives", "include", "includes", "contain", "contains", "allow", "allows"
+    };
+
+    /// <summary>
+    /// Participles that open a definition whose subject was left in the term: "Instances of
+    /// classes are created using the new keyword" answers with "Created using the new keyword".
+    /// </summary>
+    private static readonly HashSet<string> PassiveOpeners = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "created", "defined", "used", "called", "given", "known", "made", "built", "passed",
+        "returned", "declared", "invoked", "executed", "initialized", "initialised", "assigned",
+        "imported", "accessed", "represented", "stored", "derived", "specified", "obtained"
     };
 
     private static readonly Regex DefinitionIs = new(
@@ -183,15 +208,29 @@ public static partial class CardFactory
             if (CodeShaped().IsMatch(text)) continue;
             if (text.Length < 3) continue;
 
-            kept.Add(line with { Text = BulletMarker().Replace(text, "", 1).Trim() });
+            kept.Add(line with { Text = text });
         }
 
-        return MergeWrapped(kept);
+        // The bullet is stripped after the lines are rejoined: a bullet on the next line is
+        // the one reliable sign that it starts a new item instead of continuing this one.
+        return MergeWrapped(kept)
+            .Select(l => l with { Text = BulletMarker().Replace(l.Text, "", 1).Trim() })
+            .Where(l => l.Text.Length >= 3)
+            .ToList();
     }
 
     /// <summary>A body line that does not end a sentence continues on the next line.</summary>
     private static List<PdfLine> MergeWrapped(List<PdfLine> lines)
     {
+        // The right edge of the text column, per page. A line that stops short of it ended
+        // on purpose; only a line that reaches it was wrapped onto the next one.
+        var margins = new Dictionary<int, double>();
+        foreach (var line in lines)
+        {
+            if (line.Right <= 0 || line.Text.Length < 30) continue;
+            margins[line.Page] = Math.Max(margins.GetValueOrDefault(line.Page), line.Right);
+        }
+
         var merged = new List<PdfLine>(lines.Count);
         PdfLine? pending = null;
 
@@ -206,9 +245,9 @@ public static partial class CardFactory
 
             var open = pending.Text.Length > 0 && !".!?:\"".Contains(pending.Text[^1]);
 
-            if (sameBlock && open)
+            if (sameBlock && open && Continues(pending, line, margins))
             {
-                pending = pending with { Text = Join(pending.Text, line.Text) };
+                pending = pending with { Text = Join(pending.Text, line.Text), Right = line.Right };
                 continue;
             }
 
@@ -218,6 +257,24 @@ public static partial class CardFactory
 
         if (pending is not null) merged.Add(pending);
         return merged;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="next"/> is the rest of <paramref name="pending"/>'s sentence.
+    /// Three things say it is not: a bullet or list number on the next line, a step back to
+    /// a narrower indent, and a pending line that never reached the right margin.
+    /// </summary>
+    private static bool Continues(PdfLine pending, PdfLine next, Dictionary<int, double> margins)
+    {
+        if (BulletMarker().IsMatch(next.Text)) return false;
+        if (next.Left < pending.Left - 2) return false;
+
+        // Plain text has no geometry: every line came in at zero, so nothing to measure.
+        if (pending.Right <= 0) return true;
+        if (!margins.TryGetValue(pending.Page, out var margin) || margin < 200) return true;
+
+        var slack = Math.Max(6.0, margin * 0.02);
+        return pending.Right >= margin - slack;
     }
 
     private static string Join(string left, string right)
@@ -287,13 +344,21 @@ public static partial class CardFactory
 
         if (drafts.Count < max)
         {
+            var blanks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var sentence in sentences)
             {
                 if (drafts.Count >= max * 2) break;
                 if (alreadyDefined.Contains(TextMatch.Normalize(sentence))) continue;
                 order++;
-                if (TryCloze(sentence, terms, out var draft))
-                    Add(draft with { Order = order, Source = source }, drafts, seen);
+                if (!TryCloze(sentence, terms, out var draft)) continue;
+
+                // Six blanks all answered "class" is repetition, not revision.
+                var used = blanks.GetValueOrDefault(draft.Back);
+                if (used >= 2) continue;
+                blanks[draft.Back] = used + 1;
+
+                Add(draft with { Order = order, Source = source }, drafts, seen);
             }
         }
 
@@ -314,11 +379,11 @@ public static partial class CardFactory
 
         foreach (var draft in drafts.OrderByDescending(d => d.Score).ThenBy(d => d.Order))
         {
-            var tokens = Tokens(draft.Front);
+            var tokens = Tokens(StripParenthetical(draft.Front));
 
             var duplicate = kept.Any(k =>
             {
-                var other = Tokens(k.Front);
+                var other = Tokens(StripParenthetical(k.Front));
 
                 // Intersect uses the default comparer, so pass the case-insensitive one.
                 var shared = tokens.Intersect(other, StringComparer.OrdinalIgnoreCase).Count();
@@ -335,6 +400,20 @@ public static partial class CardFactory
         }
 
         return kept;
+    }
+
+    /// <summary>
+    /// "Exponential distribution (aka negative exponential distribution)" is the same card as
+    /// the heading "Exponential Probability Distribution", so the aside is dropped before the
+    /// two fronts are compared.
+    /// </summary>
+    private static string StripParenthetical(string text)
+    {
+        var open = text.IndexOf('(');
+        if (open <= 0) return text;
+        var close = text.IndexOf(')', open);
+        if (close < open) return text;
+        return (text[..open] + " " + text[(close + 1)..]).Trim();
     }
 
     private static HashSet<string> Tokens(string text)
@@ -651,7 +730,7 @@ public static partial class CardFactory
         foreach (var term in terms)
         {
             if (term.Length is < 4 or > 40) continue;
-            var at = sentence.IndexOf(term, StringComparison.OrdinalIgnoreCase);
+            var at = IndexOfWord(sentence, term);
             if (at <= 0) continue;
             if (term.Length > best.Length) best = (at, term.Length);
         }
@@ -685,6 +764,28 @@ public static partial class CardFactory
         if (best.Index >= 0 && best.Length >= 4) return best;
 
         return null;
+    }
+
+    /// <summary>
+    /// "class" must not be found inside "classes": blanking it would leave "____es" on the card.
+    /// </summary>
+    private static int IndexOfWord(string sentence, string term)
+    {
+        var from = 0;
+        while (from < sentence.Length)
+        {
+            var at = sentence.IndexOf(term, from, StringComparison.OrdinalIgnoreCase);
+            if (at < 0) return -1;
+
+            var end = at + term.Length;
+            var startsWord = at == 0 || !char.IsLetter(sentence[at - 1]);
+            var endsWord = end >= sentence.Length || !char.IsLetter(sentence[end]);
+            if (startsWord && endsWord) return at;
+
+            from = at + 1;
+        }
+
+        return -1;
     }
 
     private static string TidyTerm(string term)
@@ -753,6 +854,9 @@ public static partial class CardFactory
 
         if (term.StartsWith("Figure", StringComparison.OrdinalIgnoreCase)) return false;
         if (term.StartsWith("Table", StringComparison.OrdinalIgnoreCase)) return false;
+
+        // A single placeholder noun is never a question worth asking.
+        if (words.Length == 1 && GenericTerms.Contains(term)) return false;
         return true;
     }
 
@@ -768,6 +872,11 @@ public static partial class CardFactory
         foreach (var lead in DefLeadIns)
             if (lower.StartsWith(lead, StringComparison.Ordinal))
                 return false;
+
+        // "Instances of classes are created using the new keyword." The definition opens on a
+        // participle with its auxiliary left behind, so the card reads as half a sentence.
+        var first = lower.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+        if (PassiveOpeners.Contains(first.TrimEnd(',', '.', ';', ':'))) return false;
 
         return true;
     }

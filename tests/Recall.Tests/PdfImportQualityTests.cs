@@ -14,6 +14,10 @@ public class PdfImportQualityTests
     private static PdfLine Line(string text, double size = Body, double bold = 0, int page = 1)
         => new(page, text, size, bold, 0);
 
+    /// <summary>A line as the layout reader reports it, with its glyph extents.</summary>
+    private static PdfLine Placed(string text, double left, double right, double size = Body, double bold = 0, int page = 1)
+        => new(page, text, size, bold, left, right);
+
     [Fact]
     public void A_heading_never_glues_onto_the_sentence_below_it()
     {
@@ -169,5 +173,89 @@ public class PdfImportQualityTests
 
         Assert.DoesNotContain(prepared, l => l.Text.Contains("Computer Programming 1"));
         Assert.Contains(prepared, l => l.Text.StartsWith("A class is"));
+    }
+
+    [Fact]
+    public void A_full_width_line_is_still_rejoined_with_its_continuation()
+    {
+        var lines = new List<PdfLine>
+        {
+            Placed("Normal distribution (aka Gaussian distribution) is the most popular and useful continuous probability", 21.6, 576.2),
+            Placed("distribution for a random variable, x. It describes data by two parameters.", 21.6, 276.6),
+        };
+
+        var prepared = CardFactory.PrepareDocument(lines);
+
+        Assert.Contains(prepared, l => l.Text.Contains("continuous probability distribution for a random variable"));
+    }
+
+    [Fact]
+    public void Short_list_rows_are_never_glued_into_one_sentence()
+    {
+        var lines = new List<PdfLine>
+        {
+            Placed("Exponential distribution (aka negative exponential distribution) is a continuous distribution often used", 21.6, 576.5),
+            Placed("to measure the time that elapses between two occurrences of an event.", 21.6, 219.6),
+            Placed("• Time required to complete a questionnaire", 39.6, 262.5),
+            Placed("• Time between vehicle arrivals at a toll booth", 39.6, 256.3),
+            Placed("• Distance between major defects in a highway", 39.6, 244.0),
+        };
+
+        var prepared = CardFactory.PrepareDocument(lines);
+
+        Assert.DoesNotContain(prepared, l => l.Text.Contains("questionnaire Time between"));
+        Assert.DoesNotContain(prepared, l => l.Text.Contains("toll booth Distance"));
+        Assert.Contains(prepared, l => l.Text == "Time between vehicle arrivals at a toll booth");
+    }
+
+    [Fact]
+    public void A_bullet_that_filled_the_column_still_starts_a_new_item()
+    {
+        var lines = new List<PdfLine>
+        {
+            Placed("• The standard deviation of the distribution determines the height and width of the", 39.6, 576.3),
+            Placed("• The mean of the distribution determines the location of the centre of the graph,", 39.6, 576.2),
+            Placed("thus changing the average.", 57.6, 197.2),
+        };
+
+        var prepared = CardFactory.PrepareDocument(lines);
+
+        Assert.Contains(prepared, l => l.Text.StartsWith("The standard deviation") && l.Text.EndsWith("width of the"));
+        Assert.Contains(prepared, l => l.Text.StartsWith("The mean of the distribution") && l.Text.EndsWith("thus changing the average."));
+    }
+
+    [Fact]
+    public void A_placeholder_noun_is_never_used_as_a_term()
+    {
+        var cards = CardFactory.FromText("The name is a defined name for namespace.", 10);
+
+        Assert.DoesNotContain(cards, c => c.Front.Equals("name", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_definition_that_opens_on_a_participle_is_dropped()
+    {
+        var cards = CardFactory.FromText(
+            "Instances of classes are created using the new keyword which allocates memory for a new instance " +
+            "and returns a reference to it.", 10);
+
+        Assert.DoesNotContain(cards, c => c.Front.StartsWith("Instances of classes", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_blank_never_cuts_a_word_in_half()
+    {
+        var lines = new List<PdfLine>
+        {
+            Line("Class", Heading, 1),
+            Line("A class is a data structure that defines data and actions in a single unit."),
+            Line("Instances of classes are created using the new keyword which allocates memory for a new instance " +
+                 "and returns a reference to it."),
+        };
+
+        var cards = CardFactory.FromLines(CardFactory.PrepareDocument(lines), 10);
+
+        Assert.DoesNotContain(cards, c => c.Front.Contains("____es"));
+        Assert.DoesNotContain(cards, c => c.Front.Contains("____s "));
     }
 }

@@ -4,10 +4,17 @@ using UglyToad.PdfPig.Content;
 
 namespace Recall.Services;
 
-/// <summary>One visual line of a PDF, with the typography that produced it.</summary>
-public sealed record PdfLine(int Page, string Text, double Size, double BoldRatio, double Left)
+/// <summary>
+/// One visual line of a PDF, with the typography that produced it. <paramref name="Left"/>
+/// and <paramref name="Right"/> are the glyph extents, which is how a wrapped line is told
+/// apart from a short line that simply ended: only a wrapped line reaches the right margin.
+/// </summary>
+public sealed record PdfLine(int Page, string Text, double Size, double BoldRatio, double Left, double Right = 0)
 {
     public bool IsBold => BoldRatio >= 0.6;
+
+    /// <summary>Zero when the line did not come from a laid-out page (plain text import).</summary>
+    public double Width => Right > Left ? Right - Left : 0;
 }
 
 /// <summary>
@@ -63,7 +70,13 @@ public static class PdfLayout
                 .OrderByDescending(g => g.Count())
                 .First().Key;
 
-            yield return new PdfLine(number, text, size, bold / (double)ordered.Count, ordered[0].StartBaseLine.X);
+            yield return new PdfLine(
+                number,
+                text,
+                size,
+                bold / (double)ordered.Count,
+                ordered[0].StartBaseLine.X,
+                ordered[^1].EndBaseLine.X);
         }
     }
 
