@@ -11,3 +11,6 @@ artifacts/
 .agents/
 .opencode/
 skills-lock.json
+
+# Sample documents stay local
+*.pdf

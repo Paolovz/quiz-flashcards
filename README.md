@@ -37,27 +37,11 @@ Answers can list alternatives with `|`. The first alternative is the key term, s
 `Mitochondria, the site of aerobic respiration` accepts `Mitochondria` alone but not
 `Mitochondrion`. Typed answers must match exactly. A near miss scores zero.
 
-## Build
+## Install
 
-Requires the .NET 10 SDK on Windows.
-
-```bash
-dotnet build
-dotnet run --project src/Recall.App
-```
-
-Tests:
-
-```bash
-dotnet test
-```
-
-Self-contained single-file build:
-
-```bash
-dotnet publish src/Recall.App/Recall.App.csproj -c Release -r win-x64 --self-contained \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
-```
+Download `Recall-win-x64.zip` from
+[Releases](https://github.com/Paolovz/quiz-flashcards/releases/latest), unzip it, and run
+`Recall.exe`. Windows 11 on x64. There is no installer and no admin prompt.
 
 ## Where your data lives
 
