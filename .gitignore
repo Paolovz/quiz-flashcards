@@ -8,5 +8,6 @@ artifacts/
 *.zip
 
 # Local agent tooling, not part of the app
+.agents/
 .opencode/
 skills-lock.json
