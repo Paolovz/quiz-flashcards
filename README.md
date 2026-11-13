@@ -20,6 +20,18 @@ account, no sync, and no AI: everything lives in one JSON file.
 - Four palettes: Clay, Deep Ocean, Sandstone, Forest Night. Settings switches them and the
   running window repaints.
 
+## PDF import
+
+The importer reads the text layer and guesses which lines are terms and which are answers.
+It looks for headings, bold runs, `term: definition` lines, bullet lists under a heading,
+and `x = meaning` lines. No model is involved, so it cannot tell when a sentence makes a
+bad question. Some cards come out wrong: a definition that starts mid-sentence, a list that
+only half survives, an answer that reads oddly on its own.
+
+Read the review list before you press Add. Untick anything that does not make sense, and
+edit the rest in the deck view afterwards. Scanned PDFs have no text layer, so they need
+OCR before the importer can read them.
+
 ## Question types
 
 | Type | Shape | Grading |
