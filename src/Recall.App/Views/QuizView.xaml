@@ -133,7 +133,7 @@
         </Style>
 
         <!-- Once the answer is in, the submit control has nothing left to do. -->
-        <Style x:Key="SubmitButton" TargetType="Button" BasedOn="{StaticResource BtnPrimary}">
+        <Style x:Key="SubmitButton" TargetType="Button" BasedOn="{StaticResource Btn}">
             <Setter Property="Margin" Value="0,10,0,0" />
             <Setter Property="HorizontalAlignment" Value="Left" />
             <Setter Property="MinWidth" Value="190" />
@@ -198,8 +198,8 @@
                                Margin="0,10,0,0"
                                Visibility="{Binding HasSource, Converter={StaticResource BoolVis}}" />
 
-                    <Border Style="{StaticResource ImagePanel}" Margin="0,18,0,0" CornerRadius="16"
-                            BorderBrush="{DynamicResource B.Border}" BorderThickness="2" Padding="10"
+                    <Border Style="{StaticResource ImagePanel}" Margin="0,18,0,0" CornerRadius="{StaticResource R.Lg}"
+                            BorderBrush="{DynamicResource B.Border}" BorderThickness="1" Padding="10"
                             HorizontalAlignment="Left">
                         <Image Source="{Binding ImagePath}" MaxHeight="240" Stretch="Uniform"
                                AutomationProperties.Name="Question image" />
@@ -328,7 +328,7 @@
 
                     <!-- Feedback -->
                     <Border Style="{StaticResource FeedbackPanel}" Margin="0,22,0,0" Padding="18,16"
-                            CornerRadius="16" BorderThickness="2">
+                            CornerRadius="{StaticResource R.Lg}" BorderThickness="1">
                         <StackPanel>
                             <TextBlock Text="{Binding FeedbackTitle}" Style="{StaticResource T.H2}" />
                             <TextBlock Text="{Binding FeedbackDetail}" Style="{StaticResource T.Body}" Margin="0,6,0,0" />

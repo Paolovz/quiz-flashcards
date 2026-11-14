@@ -90,8 +90,8 @@ public sealed class LibraryViewModel : Observable
         get
         {
             var decks = _store.Data.Decks.Count;
-            var due = _store.DueTotal;
-            return $"{decks} deck{(decks == 1 ? "" : "s")} · {due} card{(due == 1 ? "" : "s")} due today";
+            var cards = _store.AllCards().Count();
+            return $"{decks} deck{(decks == 1 ? "" : "s")} · {cards} card{(cards == 1 ? "" : "s")}";
         }
     }
 

@@ -389,4 +389,95 @@ public class PdfImportQualityTests
 
         Assert.Empty(cards);
     }
+
+    [Fact]
+    public void A_list_answer_puts_one_item_per_line()
+    {
+        var lines = new List<PdfLine>
+        {
+            Line("Properties of the Normal Curve", Heading, 1),
+            Line("• The normal distribution curve is symmetric about the mean."),
+            Line("• Approximately 68% of the data values lie within 1 standard deviation."),
+            Line("• Approximately 95% of the data values lie within 2 standard deviations."),
+        };
+
+        var cards = CardFactory.FromLines(CardFactory.PrepareDocument(lines), 10);
+
+        var card = Assert.Single(cards, c => c.Kind == "list");
+        Assert.Equal(3, card.Back.Split('\n').Length);
+        Assert.DoesNotContain("mean. Approximately", card.Back);
+    }
+
+    [Fact]
+    public void A_worked_example_lead_in_is_not_a_cloze()
+    {
+        const string prose =
+            "For example, the constructor executes automatically and performs its statements to " +
+            "initialise the instance variables of the object when the program starts running.";
+
+        var cards = CardFactory.FromText(prose, 10);
+
+        Assert.DoesNotContain(cards, c => c.Kind == "cloze");
+    }
+
+    [Fact]
+    public void A_procedure_step_is_not_a_cloze()
+    {
+        const string prose =
+            "Go to the row that represents the leading digit of the Z-value and record the second " +
+            "decimal place of the value that appears in that row of the table.";
+
+        var cards = CardFactory.FromText(prose, 10);
+
+        Assert.DoesNotContain(cards, c => c.Kind == "cloze");
+    }
+
+    [Fact]
+    public void A_cloze_never_starts_on_a_pronoun_without_its_antecedent()
+    {
+        const string prose =
+            "A class is a blueprint. It defines dynamically created instances of the class, also " +
+            "known as objects, and it allocates memory for every new instance.";
+
+        var cards = CardFactory.FromText(prose, 10);
+
+        Assert.DoesNotContain(cards, c => c.Kind == "cloze" &&
+                                          c.Front.StartsWith("It ", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void A_sentence_that_continues_the_one_above_it_is_not_a_cloze()
+    {
+        const string prose =
+            "Then the members of the class or structure can only be accessed or updated by calling " +
+            "the respective methods through the object that owns them.";
+
+        var cards = CardFactory.FromText(prose, 10);
+
+        Assert.DoesNotContain(cards, c => c.Kind == "cloze");
+    }
+
+    [Fact]
+    public void A_cloze_never_quotes_a_variable_from_a_worked_example()
+    {
+        const string prose =
+            "The constructor executes automatically and performs its statements to initialise the " +
+            "instance variables of object p1 before the program continues to the next line.";
+
+        var cards = CardFactory.FromText(prose, 10);
+
+        Assert.DoesNotContain(cards, c => c.Kind == "cloze");
+    }
+
+    [Fact]
+    public void Two_clauses_glued_by_a_dash_are_not_a_cloze()
+    {
+        const string prose =
+            "Defining the modifier of class data members, like instance variables, as private – " +
+            "This will make sure that data members of the class are not directly accessible.";
+
+        var cards = CardFactory.FromText(prose, 10);
+
+        Assert.DoesNotContain(cards, c => c.Kind == "cloze");
+    }
 }

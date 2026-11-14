@@ -18,10 +18,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" CornerRadius="18" Padding="16"
+                        <Border x:Name="Bd" CornerRadius="{StaticResource R.Xl}" Padding="16"
                                 Background="{DynamicResource B.Surface}"
                                 BorderBrush="{DynamicResource B.Border}"
-                                BorderThickness="3"
+                                BorderThickness="1"
                                 RenderTransformOrigin="0.5,0.5">
                             <Border.RenderTransform>
                                 <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1" />
@@ -134,9 +134,9 @@
                                         </Grid.ColumnDefinitions>
 
                                         <!-- Swatch strip: background, surface, primary, accent. -->
-                                        <Border Grid.Column="0" Width="60" Height="60" CornerRadius="12"
+                                        <Border Grid.Column="0" Width="60" Height="60" CornerRadius="{StaticResource R.Md}"
                                                 Background="{Binding Background}"
-                                                BorderBrush="{Binding Primary}" BorderThickness="2">
+                                                BorderBrush="{Binding Primary}" BorderThickness="1">
                                             <Grid Margin="6">
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="*" />

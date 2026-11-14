@@ -23,8 +23,8 @@ public static class ThemeManager
 
     public static IReadOnlyList<ThemeOption> All { get; } = new[]
     {
-        new ThemeOption("clay", "Clay", "Study purple on paper. The original.",
-            false, "#FAF5FF", "#FFFFFF", "#7C3AED", "#059669"),
+        new ThemeOption("clay", "Graphite", "Neutral paper, ink text, one blue. The default.",
+            false, "#F5F6F8", "#FFFFFF", "#1D4ED8", "#15803D"),
         new ThemeOption("deepocean", "Deep Ocean", "Near-black navy with a teal current.",
             true, "#071722", "#0E2634", "#2DD4BF", "#34D399"),
         new ThemeOption("sandstone", "Sandstone", "Warm paper, burnt orange, calm teal.",

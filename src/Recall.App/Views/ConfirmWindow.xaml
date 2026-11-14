@@ -17,8 +17,8 @@
 
         <Border Background="{DynamicResource B.Surface}"
                 BorderBrush="{DynamicResource B.Border}"
-                BorderThickness="3"
-                CornerRadius="24"
+                BorderThickness="1"
+                CornerRadius="{StaticResource R.Xl}"
                 Padding="28,24"
                 Margin="24"
                 MaxWidth="470"

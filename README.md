@@ -4,8 +4,8 @@ A flashcard app for Windows. It keeps decks on your disk, schedules reviews with
 asks eight kinds of question. A PDF importer turns a document into cards. There is no
 account, no sync, and no AI: everything lives in one JSON file.
 
-![Windows](https://img.shields.io/badge/platform-Windows%2011-7C3AED)
-![.NET](https://img.shields.io/badge/.NET-10-7C3AED)
+![Windows](https://img.shields.io/badge/platform-Windows%2011-1D4ED8)
+![.NET](https://img.shields.io/badge/.NET-10-1D4ED8)
 
 ## What it does
 
@@ -17,7 +17,7 @@ account, no sync, and no AI: everything lives in one JSON file.
   session again.
 - PDF import that pulls definition-shaped pairs out of a document and shows them in a
   review list. Nothing is written until you press Add.
-- Four palettes: Clay, Deep Ocean, Sandstone, Forest Night. Settings switches them and the
+- Four palettes: Graphite, Deep Ocean, Sandstone, Forest Night. Settings switches them and the
   running window repaints.
 
 ## PDF import

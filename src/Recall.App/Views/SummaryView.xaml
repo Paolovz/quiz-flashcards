@@ -68,7 +68,7 @@
                     <ItemsControl ItemsSource="{Binding Missed}" Margin="0,10,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="{DynamicResource B.DangerSoft}" CornerRadius="10"
+                                <Border Background="{DynamicResource B.DangerSoft}" CornerRadius="{StaticResource R.Lg}"
                                         Padding="12,9" Margin="0,0,0,6">
                                     <TextBlock Text="{Binding}" Style="{StaticResource T.Body}" FontSize="13"
                                                TextTrimming="CharacterEllipsis" MaxHeight="42" />

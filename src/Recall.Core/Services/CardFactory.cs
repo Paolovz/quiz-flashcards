@@ -109,7 +109,8 @@ public static partial class CardFactory
         "the following", "following example", "given example", "example below", "below shows",
         "as shown", "the statement", "is declared", "are declared", "in this example",
         "the example", "the sample", "sample program", "the output", "the program below",
-        "sample problem", "practice problem", "problem set"
+        "sample problem", "practice problem", "problem set", "for example", "for instance",
+        "e.g.", "i.e."
     };
 
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
@@ -363,7 +364,9 @@ public static partial class CardFactory
             if (items.Count < 3) continue;
 
             order++;
-            Add(new DraftCard(term, string.Join(' ', items), source, "list", 1.45, order), drafts, seen);
+            // One item per line. Joined with a space the answer reads as a run-on and the
+            // reader cannot tell where one point ends and the next begins.
+            Add(new DraftCard(term, string.Join('\n', items), source, "list", 1.45, order), drafts, seen);
         }
 
         // 2. A definition written as an assignment: "median = the middle value of a data set".
@@ -794,15 +797,37 @@ public static partial class CardFactory
             if (lower.Contains(lead, StringComparison.Ordinal))
                 return false;
 
+        // A procedure step. "Find the value in the table and multiply it by two" describes
+        // an exercise, not the subject, and its blank lands on a number or a noun in the
+        // instructions.
+        if (ProcedureOpener().IsMatch(s)) return false;
+
         // A formula, a table row, or a bulleted list that lost its bullet.
         if (s.Contains('=')) return false;
         if (MathGlyph().IsMatch(s)) return false;
         if (AdverbRun().IsMatch(s)) return false;
 
+        // Two clauses glued by a dash. The second one starts a new thought with its own
+        // capital, so the blank lands on whichever half happened to carry the term and the
+        // front reads like two sentences stapled together.
+        if (s.Contains(" – ", StringComparison.Ordinal) ||
+            s.Contains(" — ", StringComparison.Ordinal))
+            return false;
+
+        // A sentence that starts by continuing the one above it, or that quotes a variable
+        // from a worked example, has no meaning once it is lifted onto a card.
+        if (ConnectiveOpener().IsMatch(s)) return false;
+        if (SampleIdentifier().IsMatch(s)) return false;
+
         var span = PickClozeSpan(s, terms);
         if (span is null) return false;
 
         var (index, length) = span.Value;
+
+        // A pronoun subject points back at the sentence before it. "It defines dynamically
+        // created instances of the ____" cannot be answered without the page.
+        if (index > 0 && PronounOpener().IsMatch(s)) return false;
+
         var blanked = s[..index] + "____" + s[(index + length)..];
         var answer = s.Substring(index, length).Trim();
         if (answer.Length < 3) return false;
@@ -870,6 +895,33 @@ public static partial class CardFactory
     /// </summary>
     [GeneratedRegex(@"[\u2190-\u21FF\u2200-\u22FF]|\uD835[\uDC00-\uDFFF]")]
     private static partial Regex MathGlyph();
+
+    /// <summary>
+    /// An instruction, not a fact. "Go to the row that represents the leading digit of the
+    /// Z-value and record the second decimal" blanks to "____ decimal" - a card about the
+    /// procedure on the page rather than about the subject.
+    /// </summary>
+    [GeneratedRegex(
+        @"^(?:go\s+to|look\s+at|refer\s+to|see\s+the|use\s+the|find\s+the|check\s+the|read\s+the|" +
+        @"click|press|select|enter|type|note\s+that|step\s+\d|while\s+using)\b",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex ProcedureOpener();
+
+    /// <summary>A sentence whose subject is a pronoun: its meaning lives in the sentence
+    /// before it, so a cloze built from it would not stand alone.</summary>
+    [GeneratedRegex(@"^(?:it|they|this|these|that|those|he|she|we|you)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex PronounOpener();
+
+    /// <summary>A connective that continues the previous sentence. "Then the members of ____
+    /// or structure can only be accessed" has no subject of its own.</summary>
+    [GeneratedRegex(@"^(?:then|next|finally|also|thus|hence|therefore|however|moreover|furthermore|now)\b",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex ConnectiveOpener();
+
+    /// <summary>A sample variable from a worked example: "object p1", "array a2". The card
+    /// would quiz the reader on a value that only exists inside the listing.</summary>
+    [GeneratedRegex(@"\b[a-z]\d\b")]
+    private static partial Regex SampleIdentifier();
 
     /// <summary>
     /// "Thus, Therefore, Sample Problem 1:" is two list fragments glued together by the
