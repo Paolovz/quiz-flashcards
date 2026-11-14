@@ -4,8 +4,7 @@ A flashcard app for Windows. It keeps decks on your disk, schedules reviews with
 asks eight kinds of question. A PDF importer turns a document into cards. There is no
 account, no sync, and no AI: everything lives in one JSON file.
 
-![Windows](https://img.shields.io/badge/platform-Windows%2011-1D4ED8)
-![.NET](https://img.shields.io/badge/.NET-10-1D4ED8)
+![The deck library, with 25 cards due and the next seven days of reviews](docs/library.png)
 
 ## What it does
 
@@ -17,22 +16,13 @@ account, no sync, and no AI: everything lives in one JSON file.
   session again.
 - PDF import that pulls definition-shaped pairs out of a document and shows them in a
   review list. Nothing is written until you press Add.
-- Four palettes: Graphite, Deep Ocean, Sandstone, Forest Night. Settings switches them and the
-  running window repaints.
+- Four palettes. Settings switches them and the running window repaints.
 
-## PDF import
-
-The importer reads the text layer and guesses which lines are terms and which are answers.
-It looks for headings, bold runs, `term: definition` lines, bullet lists under a heading,
-and `x = meaning` lines. No model is involved, so it cannot tell when a sentence makes a
-bad question. Some cards come out wrong: a definition that starts mid-sentence, a list that
-only half survives, an answer that reads oddly on its own.
-
-Read the review list before you press Add. Untick anything that does not make sense, and
-edit the rest in the deck view afterwards. Scanned PDFs have no text layer, so they need
-OCR before the importer can read them.
+![A deck open in the editor, with the card list on the left](docs/deck.png)
 
 ## Question types
+
+![A multiple choice question, four options, one correct](docs/quiz.png)
 
 | Type | Shape | Grading |
 | --- | --- | --- |
@@ -48,6 +38,26 @@ OCR before the importer can read them.
 Answers can list alternatives with `|`. The first alternative is the key term, so
 `Mitochondria, the site of aerobic respiration` accepts `Mitochondria` alone but not
 `Mitochondrion`. Typed answers must match exactly. A near miss scores zero.
+
+## PDF import
+
+The importer reads the text layer and guesses which lines are terms and which are answers.
+It looks for headings, bold runs, `term: definition` lines, bullet lists under a heading,
+and `x = meaning` lines. No model is involved, so it cannot tell when a sentence makes a
+bad question. Some cards come out wrong: a definition that starts mid-sentence, a list that
+only half survives, an answer that reads oddly on its own.
+
+Read the review list before you press Add. Untick anything that does not make sense, and
+edit the rest in the deck view afterwards. Scanned PDFs have no text layer, so they need
+OCR before the importer can read them.
+
+## Palettes
+
+![Settings, with the four palettes and the selected one marked](docs/settings.png)
+
+Graphite is the default: neutral paper, ink text, one blue for the action on the screen.
+Deep Ocean and Forest Night are dark. Sandstone is warm paper. The choice is saved with your
+profile and applies straight away.
 
 ## Install
 
